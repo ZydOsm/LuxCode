@@ -1,0 +1,25 @@
+# Secrets — never commit real API keys. Copy .env.example to .env instead.
+.env
+
+# Local, per-user runtime state — not meant to be shared or templated.
+settings.json
+history.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+typer>=0.12
+rich>=13.7
+pydantic>=2.6
+httpx>=0.27
+google-genai>=0.5
+customtkinter>=5.2
+python-dotenv>=1.0
+openai>=1.30
+anthropic>=0.30
+pyinstaller>=6.6
