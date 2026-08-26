@@ -545,7 +545,7 @@ class AnalyzerApp(ctk.CTk):
             sidebar, text=APP_TAGLINE, text_color=BRAND_GOLD, font=self.f_subtitle_bold,
         ).pack(anchor="w", padx=24, pady=(0, 2))
         ctk.CTkLabel(
-            sidebar, text="Complexity & code review, powered by Gemini",
+            sidebar, text="Complexity & code review",
             text_color=MUTED, font=self.f_small,
         ).pack(anchor="w", padx=24, pady=(0, 24))
 
@@ -966,7 +966,7 @@ class AnalyzerApp(ctk.CTk):
         toolbar = ctk.CTkFrame(editor_tab, fg_color="transparent")
         toolbar.grid(row=0, column=0, sticky="we", pady=(2, 10))
         ctk.CTkLabel(
-            toolbar, text="Paste your Python solution — it's analyzed against the official problem.",
+            toolbar, text="Paste your Python solution.",
             text_color=MUTED, font=self.f_subtitle,
         ).pack(side="left")
 
