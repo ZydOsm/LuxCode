@@ -12,11 +12,11 @@ import customtkinter as ctk
 
 from theme import ACCENT, ACCENT_HOVER, BORDER, CARD_BG, CARD_BG_2, GREEN, HOVER_TINT, MUTED, RED, TEXT, TEXT_DIM, YELLOW
 
-# Deliberately a fixed dark chalkboard surface regardless of app theme — like
-# most drawing-canvas apps, the canvas itself isn't meant to follow the UI
-# chrome's light/dark mode (chalk-on-slate is the whole visual metaphor).
-_BOARD_BG = "#14161c"
-_INK_COLORS = [("#f5f5f7", "Chalk"), ("#6e6bf5", "Violet"), ("#3ecf8e", "Green"), ("#f2666b", "Red")]
+# A real whiteboard should actually look like a whiteboard — light-mode users
+# get a light board with a dark default pen, not a hardcoded-black canvas
+# that reads as broken/unstyled against the rest of a light UI.
+_BOARD_BG = CARD_BG
+_INK_COLORS = [(TEXT, "Ink"), ("#6e6bf5", "Violet"), ("#3ecf8e", "Green"), ("#f2666b", "Red")]
 
 _DURATIONS = [("15 min", 15 * 60), ("30 min", 30 * 60), ("45 min", 45 * 60), ("60 min", 60 * 60)]
 
@@ -95,7 +95,7 @@ class WhiteboardPanel(ctk.CTkFrame):
         h = self.canvas.winfo_height()
         if w > 1 and h > 1:
             self.canvas.create_text(
-                w - 10, h - 10, text="zyad", anchor="se", fill="#1c1e26", font=("Cascadia Code", 11), tags="watermark",
+                w - 10, h - 10, text="zyad", anchor="se", fill=CARD_BG_2, font=("Cascadia Code", 11), tags="watermark",
             )
             self.canvas.tag_lower("watermark")
 

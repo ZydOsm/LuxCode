@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import queue
 import re
+import subprocess
+import sys
 import threading
 import tkinter as tk
 
@@ -403,7 +406,7 @@ class AnalyzerApp(ctk.CTk):
         self.f_code = self.fonts.code
         self.f_pill = self.fonts.pill
 
-    def _on_close(self) -> None:
+    def _save_window_geometry(self) -> None:
         # Tk geometry strings use +/- for BOTH the delimiter and negative
         # offsets (e.g. "1480x940-50+80" on a monitor left of the primary),
         # so a naive split("+") breaks — parse with an explicit sign group.
@@ -411,8 +414,26 @@ class AnalyzerApp(ctk.CTk):
         if match:
             w, h, x, y = match.groups()
             update_settings(window={"w": int(w), "h": int(h), "x": int(x), "y": int(y)})
+
+    def _on_close(self) -> None:
+        self._save_window_geometry()
         self.leetcode_client.close()
         self.destroy()
+
+    def _relaunch_app(self) -> None:
+        """Theme/font-scale changes are resolved once at import time (see
+        theme.py) — there is no live hook left to re-paint an already-built
+        widget tree. Rather than making the user close and manually reopen
+        the app to see a Settings change take effect, do it for them: save
+        window geometry, spawn a fresh process, then exit this one."""
+        self._save_window_geometry()
+        self.leetcode_client.close()
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable])
+        else:
+            subprocess.Popen([sys.executable, os.path.abspath(sys.argv[0])])
+        self.destroy()
+        sys.exit(0)
 
     def _bind_shortcuts(self) -> None:
         """Space/arrow-key trace controls — scoped to when the Trace tab is
@@ -865,8 +886,9 @@ class AnalyzerApp(ctk.CTk):
         theme_menu.set({"dark": "Dark", "light": "Light", "high_contrast": "High Contrast"}.get(THEME_MODE, "Dark"))
         theme_menu.pack(fill="x", pady=(6, 4))
         ctk.CTkLabel(
-            body, text="Takes effect next launch — every color in this app is\n"
-                       "resolved once at startup, not re-read live.",
+            body, text="Saving a theme change restarts the app automatically to\n"
+                       "apply it — window size/position are kept, but anything\n"
+                       "unsaved in the editor is not.",
             text_color=FAINT, font=self.f_small, justify="left", anchor="w",
         ).pack(anchor="w", pady=(0, 16))
 
@@ -884,7 +906,7 @@ class AnalyzerApp(ctk.CTk):
         font_slider.pack(fill="x", pady=(6, 2))
         font_label.pack(anchor="w")
         ctk.CTkLabel(
-            body, text="Also takes effect next launch.", text_color=FAINT, font=self.f_small, anchor="w",
+            body, text="Also restarts the app to apply.", text_color=FAINT, font=self.f_small, anchor="w",
         ).pack(anchor="w", pady=(0, 16))
 
         ctk.CTkLabel(body, text="Motion", font=self.f_body_bold, text_color=TEXT).pack(anchor="w", pady=(0, 4))
@@ -915,9 +937,17 @@ class AnalyzerApp(ctk.CTk):
                     changed_keys.append(env_var)
 
             theme_key = {"Dark": "dark", "Light": "light", "High Contrast": "high_contrast"}[theme_menu.get()]
+            new_font_scale = round(font_scale_var.get(), 2)
+            # Theme/font resolve once at process start (see theme.py) — the
+            # only way to make a change actually visible is a fresh process.
+            needs_restart = theme_key != THEME_MODE or abs(new_font_scale - FONT_SCALE) > 0.001
             update_settings(
-                theme=theme_key, font_scale=round(font_scale_var.get(), 2), reduced_motion=reduced_motion_var.get(),
+                theme=theme_key, font_scale=new_font_scale, reduced_motion=reduced_motion_var.get(),
             )
+            if needs_restart:
+                api_key_status.configure(text="Restarting to apply your changes...", text_color=ACCENT)
+                modal.after(500, self._relaunch_app)
+                return
             if changed_keys:
                 api_key_status.configure(text=f"✓ Updated: {', '.join(changed_keys)}", text_color=GREEN)
                 modal.after(500, modal.destroy)

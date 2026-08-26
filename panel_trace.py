@@ -191,6 +191,9 @@ class TracePanel(ctk.CTkFrame):
             inner, from_=0, to=1, number_of_steps=1, command=self._on_slider,
             fg_color=CARD_BG_2, progress_color=ACCENT, button_color=ACCENT, button_hover_color=ACCENT_HOVER,
         )
+        # CTkSlider defaults to 50% internally until explicitly set — without
+        # this the thumb sits dead center before any trace has even run.
+        self.slider.set(0)
         self.slider.grid(row=0, column=1, sticky="we")
 
         self.step_label = ctk.CTkLabel(inner, text="Step 0 / 0", text_color=TEXT_DIM, font=self.fonts.small, width=150)
