@@ -170,7 +170,7 @@ class TracePanel(ctk.CTkFrame):
         # Shown when the editor's code has changed since this trace ran, so
         # stale results never masquerade as current ones.
         self.stale_label = ctk.CTkLabel(
-            bar, text="⚠ Code changed — this trace is out of date. Re-run to refresh.",
+            bar, text="⚠ Code changed, this trace is out of date. Re-run to refresh.",
             text_color=YELLOW, font=self.fonts.small,
         )
         self.retry_button = ctk.CTkButton(
@@ -219,10 +219,10 @@ class TracePanel(ctk.CTkFrame):
             return btn
 
         _mini("↢", self._step_back, "Step back one recorded event")
-        _mini("↣", self._step_into, "Step into — advance one recorded event")
-        _mini("⤵", self._step_over, "Step over — run past the next call without descending into it")
-        _mini("⤴", self._step_out, "Step out — run until the current call returns")
-        _mini("⏭", self._continue_to_breakpoint, "Continue — run to the next breakpoint")
+        _mini("↣", self._step_into, "Step into: advance one recorded event")
+        _mini("⤵", self._step_over, "Step over: run past the next call without descending into it")
+        _mini("⤴", self._step_out, "Step out: run until the current call returns")
+        _mini("⏭", self._continue_to_breakpoint, "Continue: run to the next breakpoint")
 
         self.exception_bar = ctk.CTkFrame(step_bar, fg_color="transparent")
         # Packed on demand in _run_done() when the trace ends in an exception.
@@ -254,7 +254,7 @@ class TracePanel(ctk.CTkFrame):
         ctk.CTkLabel(
             wrap,
             text="Runs your own solution, on your own machine, against the\n"
-                 "problem's first example — then lets you scrub through it\n"
+                 "problem's first example, then lets you scrub through it\n"
                  "line by line: variables, recursion tree, DP grid, memory.",
             text_color=MUTED, font=self.fonts.body, justify="center",
         ).pack(pady=(10, 0))
@@ -273,7 +273,7 @@ class TracePanel(ctk.CTkFrame):
             return
         if self.get_language and self.get_language() not in ("Python3", "Python"):
             self.status_label.configure(
-                text="Execution Trace only runs Python — switch the language selector back to "
+                text="Execution Trace only runs Python, switch the language selector back to "
                      "Python3 to use this tab.",
                 text_color=RED,
             )
@@ -289,7 +289,7 @@ class TracePanel(ctk.CTkFrame):
             args = parse_example_args(metadata.example_testcases, metadata.param_names)
         if args is None:
             self.status_label.configure(
-                text="Couldn't auto-detect example input for this problem — trace unavailable.",
+                text="Couldn't auto-detect example input for this problem, trace unavailable.",
                 text_color=RED,
             )
             return
@@ -368,7 +368,7 @@ class TracePanel(ctk.CTkFrame):
         if trace.error:
             msg += f"  Solution raised: {trace.error}"
         if trace.truncated:
-            msg += "  (trace truncated — execution ran too long)"
+            msg += "  (trace truncated, execution ran too long)"
         self.status_label.configure(text=msg, text_color=YELLOW if trace.error or trace.truncated else GREEN)
 
         self.slider.configure(state="normal", from_=0, to=len(trace.steps) - 1, number_of_steps=max(len(trace.steps) - 1, 1))
@@ -450,7 +450,7 @@ class TracePanel(ctk.CTkFrame):
 
     def _continue_to_breakpoint(self) -> None:
         if not self.trace or not self.breakpoints:
-            self.status_label.configure(text="No breakpoints set — click a line number to add one.", text_color=MUTED)
+            self.status_label.configure(text="No breakpoints set, click a line number to add one.", text_color=MUTED)
             return
         for j in range(self.current_step + 1, len(self.trace.steps)):
             step = self.trace.steps[j]
@@ -506,7 +506,7 @@ class TracePanel(ctk.CTkFrame):
             )
             line_label.pack(side="left")
             entry = ctk.CTkEntry(
-                inner, placeholder_text="condition (optional) — e.g. i > 3", font=self.fonts.code_small,
+                inner, placeholder_text="condition (optional), e.g. i > 3", font=self.fonts.code_small,
                 fg_color=CARD_BG, border_color=BORDER,
             )
             entry.insert(0, self.breakpoints[line_no])
@@ -733,7 +733,7 @@ class TracePanel(ctk.CTkFrame):
             self.dp_card = ctk.CTkFrame(self.body, fg_color=CARD_BG, corner_radius=12, border_width=1, border_color=BORDER)
             self.dp_card.grid(row=row, column=0, columnspan=2, sticky="we", pady=(0, 14))
             ctk.CTkLabel(
-                self.dp_card, text=f"DP Grid — {self.dp_var_name}", font=self.fonts.card_title, text_color=TEXT,
+                self.dp_card, text=f"DP Grid: {self.dp_var_name}", font=self.fonts.card_title, text_color=TEXT,
             ).pack(anchor="w", padx=18, pady=(16, 10))
             self.dp_canvas = tk.Canvas(self.dp_card, height=260, bg=CARD_BG, highlightthickness=0)
             self.dp_canvas.pack(fill="x", padx=18, pady=(0, 16))

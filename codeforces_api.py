@@ -118,7 +118,7 @@ class CodeforcesClient:
         cached = self._catalog.get(code)
         if cached is None:
             raise CodeforcesAPIError(
-                f"No cached data for {code} — call list_problems() first to load the Codeforces catalog."
+                f"No cached data for {code}, call list_problems() first to load the Codeforces catalog."
             )
 
         url = _PROBLEM_URL.format(contest_id=contest_id, index=index)
@@ -126,7 +126,7 @@ class CodeforcesClient:
             f"{cached['name']}\n"
             f"Rating: {cached['rating'] if cached['rating'] is not None else 'unrated'}\n"
             f"Tags: {', '.join(cached['tags']) or 'none listed'}\n\n"
-            "The full statement isn't available here — Codeforces' public API only exposes "
+            "The full statement isn't available here. Codeforces' public API only exposes "
             "problem metadata (name/rating/tags), and the problem page itself sits behind a "
             "bot-check this app doesn't attempt to solve. Open it directly to read it:\n"
             f"{url}"

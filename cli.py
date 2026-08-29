@@ -16,7 +16,7 @@ from leetcode_api import LeetCodeAPIError, LeetCodeClient, ProblemMetadata
 
 app = typer.Typer(
     add_completion=False,
-    help="LuxCode CLI — evaluate a LeetCode submission's complexity, clarity, and redundancies.",
+    help="LuxCode CLI: evaluate a LeetCode submission's complexity, clarity, and redundancies.",
 )
 console = Console()
 

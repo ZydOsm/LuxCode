@@ -66,7 +66,7 @@ class SkillsPanel(ctk.CTkFrame):
             wrap.grid(row=0, column=0, pady=100)
             ctk.CTkLabel(wrap, text="◈", text_color=FAINT, font=ctk.CTkFont(size=30)).pack()
             ctk.CTkLabel(
-                wrap, text="Analyze a few submissions and this fills in — a warmup\n"
+                wrap, text="Analyze a few submissions and this fills in: a warmup\n"
                            "queue of problems due for review, plus a map of which\n"
                            "topics you're actually strong in.",
                 text_color=MUTED, font=self.fonts.body, justify="center",
@@ -77,7 +77,7 @@ class SkillsPanel(ctk.CTkFrame):
             due_card = ctk.CTkFrame(self.scroll, fg_color=CARD_BG, corner_radius=12, border_width=1, border_color=BORDER)
             due_card.grid(row=row, column=0, sticky="we", pady=(0, 16))
             ctk.CTkLabel(
-                due_card, text=f"Warmup — {len(due)} due for review", font=self.fonts.card_title, text_color=TEXT,
+                due_card, text=f"Warmup: {len(due)} due for review", font=self.fonts.card_title, text_color=TEXT,
             ).pack(anchor="w", padx=20, pady=(18, 4))
             ctk.CTkLabel(
                 due_card, text="Spaced repetition: problems you solved well come back less often; "

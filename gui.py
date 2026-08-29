@@ -82,7 +82,7 @@ MAX_SEARCH_RESULTS = 30
 
 CHANGELOG: list[tuple[str, list[str]]] = [
     ("Rebrand", [
-        "LeetCode Analyzer is now LuxCode — LeetCode Premium, on steroids",
+        "LeetCode Analyzer is now LuxCode, LeetCode Premium, on steroids",
         "New API key setup flow: pick a provider and paste a key on first launch, or anytime from Settings",
     ]),
     ("Debugger & test suite", [
@@ -367,7 +367,7 @@ class ProblemRow(ctk.CTkFrame):
 class AnalyzerApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(f"{APP_NAME} — {APP_TAGLINE}")
+        self.title(f"{APP_NAME} - {APP_TAGLINE}")
         self.settings = load_settings()
 
         saved_window = self.settings.get("window")
@@ -531,7 +531,7 @@ class AnalyzerApp(ctk.CTk):
         card = ctk.CTkFrame(popup, fg_color=CARD_BG, corner_radius=16, border_width=2, border_color=ACCENT)
         card.pack(fill="both", expand=True)
         ctk.CTkLabel(card, text="🎉 Perfect score!", font=self.f_card_title, text_color=TEXT).pack(pady=(16, 0))
-        ctk.CTkLabel(card, text="10 / 10 — structure & clarity", font=self.f_small, text_color=MUTED).pack()
+        ctk.CTkLabel(card, text="10 / 10 · structure & clarity", font=self.f_small, text_color=MUTED).pack()
 
         canvas = tk.Canvas(card, bg=CARD_BG, highlightthickness=0)
         canvas.pack(fill="both", expand=True, padx=4, pady=(4, 4))
@@ -679,7 +679,7 @@ class AnalyzerApp(ctk.CTk):
 
         self.playground_note = ctk.CTkLabel(
             sidebar,
-            text="Playground mode — no problem needed. Paste any code in the\n"
+            text="Playground mode: no problem needed. Paste any code in the\n"
                  "Editor tab and click Analyze; the LLM figures out what it does.",
             text_color=MUTED, font=self.f_small, justify="left",
         )
@@ -700,7 +700,7 @@ class AnalyzerApp(ctk.CTk):
         self.language_menu.pack(fill="x", padx=24, pady=(0, 6))
         self.language_note = ctk.CTkLabel(
             sidebar,
-            text="Execution Trace, Tests, Fuzz, and the Performance Race run real Python —\n"
+            text="Execution Trace, Tests, Fuzz, and the Performance Race run real Python;\n"
                  "they stay Python-only. Other languages get full LLM analysis on the Report tab.",
             text_color=MUTED, font=self.f_small, justify="left",
         )
@@ -717,7 +717,7 @@ class AnalyzerApp(ctk.CTk):
         self.model_menu.pack(fill="x", padx=24, pady=(0, 6))
         ctk.CTkLabel(
             sidebar,
-            text="gemini-3.5-flash-lite is the cheapest option —\nminimal thinking, lowest token usage.",
+            text="gemini-3.5-flash-lite is the cheapest option:\nminimal thinking, lowest token usage.",
             text_color=MUTED, font=self.f_small, justify="left",
         ).pack(anchor="w", padx=24, pady=(0, 20))
 
@@ -753,7 +753,7 @@ class AnalyzerApp(ctk.CTk):
         if self.selected_problem is None:
             ctk.CTkLabel(
                 self.selected_badge_frame,
-                text="No problem selected — search above.",
+                text="No problem selected, search above.",
                 text_color=FAINT, font=self.f_small, wraplength=330, justify="left", anchor="w",
             ).pack(anchor="w", fill="x")
             return
@@ -821,7 +821,7 @@ class AnalyzerApp(ctk.CTk):
         metadata = self.current_metadata
         if metadata is None or metadata.title_slug != p.title_slug:
             ctk.CTkLabel(
-                scroll, text="Still loading the full problem statement — try again in a moment.",
+                scroll, text="Still loading the full problem statement, try again in a moment.",
                 text_color=MUTED, font=self.f_body,
             ).pack(anchor="w", pady=20)
             return
@@ -852,7 +852,7 @@ class AnalyzerApp(ctk.CTk):
         inner.pack(fill="x", padx=14, pady=12)
         ctk.CTkLabel(
             inner, text="New here? The Trace tab lets you step through your own code's "
-                        "execution line by line — breakpoints, watches, the works. "
+                        "execution line by line: breakpoints, watches, the works. "
                         "The Tests tab reruns every official example automatically.",
             text_color="#ffffff", font=self.f_small, justify="left", anchor="w", wraplength=330,
         ).pack(anchor="w")
@@ -881,7 +881,7 @@ class AnalyzerApp(ctk.CTk):
             for item in items:
                 row = ctk.CTkFrame(scroll, fg_color="transparent")
                 row.pack(fill="x", pady=2)
-                ctk.CTkLabel(row, text="—", text_color=ACCENT, font=self.f_body_bold, width=16).pack(side="left")
+                ctk.CTkLabel(row, text="•", text_color=ACCENT, font=self.f_body_bold, width=16).pack(side="left")
                 label = ctk.CTkLabel(
                     row, text=item, text_color=TEXT_DIM, font=self.f_small, justify="left", anchor="w",
                 )
@@ -890,16 +890,16 @@ class AnalyzerApp(ctk.CTk):
 
     _HELP_SECTIONS: list[tuple[str, list[str]]] = [
         ("Tabs", [
-            "Editor — paste a solution; live anti-pattern hints, stencils, Socratic hint slider.",
-            "Trace — steps your own code line by line: breakpoints, watches, call stack, DP grid.",
-            "Tests — reruns every official example plus curated boundary cases and a determinism check.",
-            "Report — the full LLM review: complexity, clarity score, redundancies, a refactor, a race.",
-            "Skills — a spaced-repetition warmup queue and a topic-by-topic skill map.",
-            "Whiteboard — a freehand scratchpad (shapes, text, eraser) plus the floating timer.",
+            "Editor: paste a solution; live anti-pattern hints, stencils, Socratic hint slider.",
+            "Trace: steps your own code line by line: breakpoints, watches, call stack, DP grid.",
+            "Tests: reruns every official example plus curated boundary cases and a determinism check.",
+            "Report: the full LLM review: complexity, clarity score, redundancies, a refactor, a race.",
+            "Skills: a spaced-repetition warmup queue and a topic-by-topic skill map.",
+            "Whiteboard: a freehand scratchpad (shapes, text, eraser) plus the floating timer.",
         ]),
         ("Keyboard shortcuts", [
-            "Trace tab — Space: play/pause · ←/→: step · Shift+←/→: step out/over",
-            "Whiteboard tab — Ctrl+Z: undo · Ctrl+Y: redo",
+            "Trace tab: Space: play/pause · ←/→: step · Shift+←/→: step out/over",
+            "Whiteboard tab: Ctrl+Z: undo · Ctrl+Y: redo",
         ]),
     ]
 
@@ -921,7 +921,7 @@ class AnalyzerApp(ctk.CTk):
             for item in items:
                 row = ctk.CTkFrame(scroll, fg_color="transparent")
                 row.pack(fill="x", pady=2)
-                ctk.CTkLabel(row, text="—", text_color=ACCENT, font=self.f_body_bold, width=16).pack(side="left")
+                ctk.CTkLabel(row, text="•", text_color=ACCENT, font=self.f_body_bold, width=16).pack(side="left")
                 label = ctk.CTkLabel(
                     row, text=item, text_color=TEXT_DIM, font=self.f_small, justify="left", anchor="w",
                 )
@@ -1133,19 +1133,17 @@ class AnalyzerApp(ctk.CTk):
                     w_.bind("<Button-1>", lambda e: (state.update(mode="add"), render()))
 
                 # Not a tile like the others on purpose — Guest isn't a
-                # profile you create, just a plain text way past the picker.
-                # The top padding roughly lines it up with the name labels
-                # that sit below the other tiles' 84px avatars.
-                guest_tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
-                guest_tile.pack(side="left", padx=10, pady=6)
+                # profile you create, just small text below the row of
+                # profile icons rather than another icon alongside them.
+                guest_row = ctk.CTkFrame(grid_wrap, fg_color="transparent")
+                guest_row.pack(pady=(18, 0))
                 guest_label = ctk.CTkLabel(
-                    guest_tile, text="Continue as Guest", text_color=TEXT_DIM, font=self.f_body_bold,
-                    cursor="hand2",
+                    guest_row, text="Continue as Guest", text_color=TEXT_DIM, font=self.f_small, cursor="hand2",
                 )
-                guest_label.pack(pady=(38, 4))
-                guest_sub = ctk.CTkLabel(guest_tile, text="Skills not saved", text_color=FAINT, font=self.f_small)
+                guest_label.pack()
+                guest_sub = ctk.CTkLabel(guest_row, text="Skills not saved", text_color=FAINT, font=self.f_small)
                 guest_sub.pack()
-                for w_ in (guest_tile, guest_label, guest_sub):
+                for w_ in (guest_row, guest_label, guest_sub):
                     w_.bind("<Button-1>", lambda e: select_profile(history.GUEST_ID))
 
         def toggle_manage() -> None:
@@ -1181,7 +1179,7 @@ class AnalyzerApp(ctk.CTk):
         ctk.CTkLabel(body, text="Connect an API key", font=self.f_card_title, text_color=TEXT).pack(anchor="w")
         ctk.CTkLabel(
             body, text="This app uses an LLM to review your submissions. Pick a provider and paste "
-                       "your key — it's saved locally in a .env file next to the app and sent only "
+                       "your key: it's saved locally in a .env file next to the app and sent only "
                        "to that provider's own API, nowhere else.",
             text_color=MUTED, font=self.f_small, justify="left", anchor="w", wraplength=410,
         ).pack(anchor="w", pady=(6, 18))
@@ -1242,7 +1240,7 @@ class AnalyzerApp(ctk.CTk):
             env_var = PROVIDERS[provider_menu.get()]["env_var"]
             write_key(env_var, key)
             self.settings = update_settings(api_key_prompted=True)
-            status_label.configure(text=f"✓ Saved — {provider_menu.get()} is ready to use.", text_color=GREEN)
+            status_label.configure(text=f"✓ Saved: {provider_menu.get()} is ready to use.", text_color=GREEN)
             modal.after(700, modal.destroy)
 
         ctk.CTkButton(
@@ -1275,7 +1273,7 @@ class AnalyzerApp(ctk.CTk):
         # -- API Keys ---------------------------------------------------------
         ctk.CTkLabel(body, text="API Keys", font=self.f_card_title, text_color=TEXT).pack(anchor="w")
         ctk.CTkLabel(
-            body, text="Stored locally in a .env file next to the app — never sent\n"
+            body, text="Stored locally in a .env file next to the app, never sent\n"
                        "anywhere except that provider's own API.",
             text_color=MUTED, font=self.f_small, justify="left", anchor="w", wraplength=380,
         ).pack(anchor="w", pady=(2, 12))
@@ -1329,7 +1327,7 @@ class AnalyzerApp(ctk.CTk):
         theme_menu.pack(fill="x", pady=(6, 4))
         ctk.CTkLabel(
             body, text="Saving a theme change restarts the app automatically to\n"
-                       "apply it — window size/position are kept, but anything\n"
+                       "apply it. Window size/position are kept, but anything\n"
                        "unsaved in the editor is not.",
             text_color=FAINT, font=self.f_small, justify="left", anchor="w",
         ).pack(anchor="w", pady=(0, 16))
@@ -1498,8 +1496,8 @@ class AnalyzerApp(ctk.CTk):
         self.hints_slider.set(0)
         self.hints_slider.pack(fill="x", pady=(10, 10))
         self.hints_text = ctk.CTkLabel(
-            hints_inner, text="Move the slider to reveal one hint tier at a time — from a conceptual "
-                              "nudge to a near-solution — so you only see as much as you need.",
+            hints_inner, text="Move the slider to reveal one hint tier at a time, from a conceptual "
+                              "nudge to a near-solution, so you only see as much as you need.",
             font=self.f_small, text_color=TEXT_DIM, justify="left", anchor="w",
         )
         self.hints_text.pack(fill="x", anchor="w")
@@ -1565,11 +1563,11 @@ class AnalyzerApp(ctk.CTk):
     def _update_provider_note(self) -> None:
         if self.active_provider == "Codeforces":
             self.provider_note.configure(
-                text="Codeforces problems are stdin/stdout, not a function to implement — "
+                text="Codeforces problems are stdin/stdout, not a function to implement. "
                      "Execution Trace, Tests, Fuzz, and the Performance Race won't find a "
                      "matching signature to run. Codeforces also doesn't expose full problem "
                      "statements through its public API, so Report analysis and the problem "
-                     "viewer only see the name, rating, and tags — not the full text."
+                     "viewer only see the name, rating, and tags, not the full text."
             )
         else:
             self.provider_note.configure(text="")
@@ -1593,7 +1591,7 @@ class AnalyzerApp(ctk.CTk):
             self._problems_loaded = False
             self.problem_section.pack_forget()
             self.playground_note.pack(anchor="w", padx=24, pady=(0, 20), before=self._language_section_label)
-            self._set_status("Playground mode — paste any code and click Analyze.", MUTED)
+            self._set_status("Playground mode: paste any code and click Analyze.", MUTED)
         else:
             self.playground_note.pack_forget()
             self.problem_section.pack(fill="x", before=self._language_section_label)
@@ -1633,8 +1631,8 @@ class AnalyzerApp(ctk.CTk):
         ctk.CTkLabel(wrap, text="◇", text_color=FAINT, font=ctk.CTkFont(size=34)).pack()
         if self.active_provider == PLAYGROUND_PROVIDER:
             ctk.CTkLabel(
-                wrap, text="Paste any code in the Editor tab and click Analyze —\n"
-                           "the LLM infers what it does on its own, no problem needed.",
+                wrap, text="Paste any code in the Editor tab and click Analyze.\n"
+                           "The LLM infers what it does on its own, no problem needed.",
                 text_color=MUTED, font=self.f_body, justify="center",
             ).pack(pady=(10, 0))
         else:
@@ -1814,7 +1812,7 @@ class AnalyzerApp(ctk.CTk):
             return
         metadata = self.current_metadata
         if metadata is None:
-            self.hints_text.configure(text="Still loading problem details — try again in a moment.")
+            self.hints_text.configure(text="Still loading problem details, try again in a moment.")
             return
         self.hints_loading = True
         self.hints_text.configure(text="Fetching hints...")
@@ -1845,11 +1843,11 @@ class AnalyzerApp(ctk.CTk):
             # Bug fix: hints can finish loading while the slider is still at 0 —
             # without this branch the text stayed stuck on "Fetching hints..."
             # forever, only updating once the user happened to move the slider.
-            self.hints_text.configure(text="Hints are ready — move the slider to reveal the first one.")
+            self.hints_text.configure(text="Hints are ready, move the slider to reveal the first one.")
         elif not hints and not self.hints_loading:
             self.hints_text.configure(
-                text="Move the slider to reveal one hint tier at a time — from a conceptual\n"
-                     "nudge to a near-solution — so you only see as much as you need."
+                text="Move the slider to reveal one hint tier at a time, from a conceptual\n"
+                     "nudge to a near-solution, so you only see as much as you need."
             )
 
     # --------------------------------------------------------- refactor
@@ -1924,7 +1922,7 @@ class AnalyzerApp(ctk.CTk):
             self._set_status("Select a problem first to find counter-examples.", RED)
             return
         if self.current_metadata is None:
-            self._set_status("Still loading problem details — try again in a moment.", RED)
+            self._set_status("Still loading problem details, try again in a moment.", RED)
             return
         expected_name = self.current_metadata.function_name
         func_name, class_name = find_entry_point(code, expected_name)
@@ -1986,7 +1984,7 @@ class AnalyzerApp(ctk.CTk):
             error_label.pack(anchor="w", pady=(2, 0))
             bind_responsive_wraplength(error_label)
         else:
-            note = " (stopped early — time budget reached)" if result.truncated else ""
+            note = " (stopped early, time budget reached)" if result.truncated else ""
             ctk.CTkLabel(
                 self.fuzz_body, text=f"✓ No crashes or timeouts found in {result.tested} random inputs{note}.",
                 text_color=GREEN, font=self.f_small,
@@ -2389,7 +2387,7 @@ class AnalyzerApp(ctk.CTk):
             for item in result.redundancies:
                 bullet = ctk.CTkFrame(redundancy_card, fg_color="transparent")
                 bullet.pack(fill="x", padx=20, pady=3)
-                ctk.CTkLabel(bullet, text="—", text_color=YELLOW, font=self.f_body_bold, width=16).pack(side="left")
+                ctk.CTkLabel(bullet, text="•", text_color=YELLOW, font=self.f_body_bold, width=16).pack(side="left")
                 item_label = ctk.CTkLabel(
                     bullet, text=_format_math(item), text_color=TEXT_DIM, font=self.f_body, justify="left", anchor="w",
                 )
@@ -2464,7 +2462,7 @@ class AnalyzerApp(ctk.CTk):
         )
         self.transpile_button.pack(side="right", padx=(0, 8))
         ctk.CTkLabel(
-            self.transpile_card, text="LLM-translated for comparison — not compiled or benchmarked, "
+            self.transpile_card, text="LLM-translated for comparison, not compiled or benchmarked, "
                                        "so treat it as a reference, not verified output.",
             text_color=MUTED, font=self.f_small,
         ).pack(anchor="w", padx=20, pady=(0, 10))
@@ -2487,7 +2485,7 @@ class AnalyzerApp(ctk.CTk):
             anchor="w", padx=20, pady=(18, 4)
         )
         ctk.CTkLabel(
-            header, text=f"No LeetCode problem selected — analyzed as standalone {language} code.",
+            header, text=f"No LeetCode problem selected, analyzed as standalone {language} code.",
             text_color=MUTED, font=self.f_small,
         ).pack(anchor="w", padx=20)
         purpose_label = ctk.CTkLabel(
@@ -2553,7 +2551,7 @@ class AnalyzerApp(ctk.CTk):
             for item in result.redundancies:
                 bullet = ctk.CTkFrame(redundancy_card, fg_color="transparent")
                 bullet.pack(fill="x", padx=20, pady=3)
-                ctk.CTkLabel(bullet, text="—", text_color=YELLOW, font=self.f_body_bold, width=16).pack(side="left")
+                ctk.CTkLabel(bullet, text="•", text_color=YELLOW, font=self.f_body_bold, width=16).pack(side="left")
                 item_label = ctk.CTkLabel(
                     bullet, text=_format_math(item), text_color=TEXT_DIM, font=self.f_body, justify="left", anchor="w",
                 )
@@ -2588,7 +2586,7 @@ class AnalyzerApp(ctk.CTk):
             anchor="w", padx=20, pady=(18, 4)
         )
         race_note_label = ctk.CTkLabel(
-            race_note, text="Not available in Playground mode — the Race needs a known function signature "
+            race_note, text="Not available in Playground mode: the Race needs a known function signature "
                             "and problem-scale test input, which only come from a selected LeetCode problem.",
             text_color=MUTED, font=self.f_small, justify="left", anchor="w",
         )

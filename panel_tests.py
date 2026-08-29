@@ -92,7 +92,7 @@ class TestsPanel(ctk.CTkFrame):
         ctk.CTkLabel(
             wrap,
             text="Reruns every official example (not just one), a set of curated\n"
-                 "boundary cases, and a determinism check — all against your\n"
+                 "boundary cases, and a determinism check, all against your\n"
                  "own solution, on your own machine.",
             text_color=MUTED, font=self.fonts.body, justify="center",
         ).pack(pady=(10, 0))
@@ -108,13 +108,13 @@ class TestsPanel(ctk.CTkFrame):
             return
         if self.get_language and self.get_language() not in ("Python3", "Python"):
             self.status_label.configure(
-                text="Test suite only runs Python — switch the language selector back to "
+                text="Test suite only runs Python, switch the language selector back to "
                      "Python3 to use this tab.",
                 text_color=RED,
             )
             return
         if metadata is None:
-            self.status_label.configure(text="Still loading problem details — try again in a moment.", text_color=RED)
+            self.status_label.configure(text="Still loading problem details, try again in a moment.", text_color=RED)
             return
         expected_name = metadata.function_name
         func_name, class_name = find_entry_point(code, expected_name)
@@ -204,7 +204,7 @@ class TestsPanel(ctk.CTkFrame):
         shown_examples = [r for r in regression_results if not self.show_only_failures or not r.ok or r.passed is False]
         if not shown_examples:
             ctk.CTkLabel(
-                examples_card, text="No failures — nice.", text_color=FAINT, font=self.fonts.small,
+                examples_card, text="No failures, nice.", text_color=FAINT, font=self.fonts.small,
             ).pack(anchor="w", padx=20, pady=(0, 16))
         for r in shown_examples:
             self._example_row(examples_card, r)

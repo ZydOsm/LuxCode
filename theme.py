@@ -104,7 +104,7 @@ CODE_FAMILY = "Cascadia Code"
 # Single source of truth for the app's name/tagline — window title, sidebar
 # wordmark, and README all read from here, so a future rename touches one line.
 APP_NAME = "LuxCode"
-APP_TAGLINE = "LeetCode Premium — on steroids"
+APP_TAGLINE = "LeetCode Premium, on steroids"
 
 # ---------------------------------------------------------------- reduced motion
 #

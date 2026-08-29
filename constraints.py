@@ -87,7 +87,7 @@ def estimate(n: int) -> list[ComplexityEstimate]:
 def recommendation(n: int) -> str:
     safe = [e.label for e in estimate(n) if e.safe]
     if not safe:
-        return "Even O(1) looks borderline at this scale — double-check the bound."
+        return "Even O(1) looks borderline at this scale, double-check the bound."
     fastest_unsafe = next((e.label for e in estimate(n) if not e.safe), None)
     msg = f"Aim for {' or '.join(safe[-2:])}."
     if fastest_unsafe:

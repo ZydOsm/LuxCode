@@ -44,7 +44,7 @@ class FloatingTimer(ctk.CTkFrame):
         row.pack(padx=10, pady=8)
 
         self.collapse_btn = ctk.CTkButton(
-            row, text="—", width=22, height=22, corner_radius=6, fg_color="transparent",
+            row, text="−", width=22, height=22, corner_radius=6, fg_color="transparent",
             hover_color=HOVER_TINT, text_color=FAINT, font=self.fonts.small, command=self.collapse,
         )
         self.collapse_btn.pack(side="left", padx=(0, 6))

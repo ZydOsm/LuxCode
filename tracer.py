@@ -306,7 +306,7 @@ def call_capturing_output(
     try:
         result = target(*prepared_args)
     except _StopTrace:
-        return False, None, f"Timed out (> {timeout_s}s) — possible infinite loop"
+        return False, None, f"Timed out (> {timeout_s}s), possible infinite loop"
     except Exception as exc:
         return False, None, f"{type(exc).__name__}: {exc}"
     finally:
