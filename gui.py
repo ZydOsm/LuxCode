@@ -963,7 +963,7 @@ class AnalyzerApp(ctk.CTk):
 
         modal = ctk.CTkToplevel(self)
         modal.title("Who's coding?")
-        w, h = 780, 560
+        w, h = 820, 600
         self.update_idletasks()
         if self.winfo_viewable():
             origin_x, origin_y = self.winfo_rootx(), self.winfo_rooty()
@@ -983,28 +983,51 @@ class AnalyzerApp(ctk.CTk):
         if not allow_cancel:
             modal.protocol("WM_DELETE_WINDOW", lambda: None)  # must pick someone to continue
 
-        body = ctk.CTkFrame(modal, fg_color="transparent")
-        body.pack(fill="both", expand=True, padx=32, pady=28)
-        ctk.CTkLabel(body, text="Who's coding?", font=self.f_title, text_color=TEXT).pack(pady=(4, 6))
+        # A card floating on BG, sized to its own content and kept centered
+        # via place() (which re-centers automatically as the card's natural
+        # size changes between select/manage/add/rename) — reads as one
+        # composed screen instead of a few small elements scattered across
+        # a mostly-empty window.
+        card = ctk.CTkFrame(modal, fg_color=CARD_BG, corner_radius=20, border_width=1, border_color=BORDER)
+        card.place(relx=0.5, rely=0.5, anchor="center")
+        body = ctk.CTkFrame(card, fg_color="transparent")
+        body.pack(padx=48, pady=40)
+
+        brand_row = ctk.CTkFrame(body, fg_color="transparent")
+        brand_row.pack(pady=(0, 22))
+        ctk.CTkFrame(brand_row, width=9, height=9, fg_color=BRAND_GOLD, corner_radius=3).pack(side="left", pady=2)
+        ctk.CTkLabel(
+            brand_row, text=f"  {APP_NAME}", font=self.f_small_bold, text_color=FAINT,
+        ).pack(side="left")
+
+        ctk.CTkLabel(body, text="Who's coding?", font=self.f_title, text_color=TEXT).pack(pady=(0, 6))
         subtitle_label = ctk.CTkLabel(body, text="", text_color=MUTED, font=self.f_small)
-        subtitle_label.pack(pady=(0, 22))
+        subtitle_label.pack(pady=(0, 26))
 
         grid_wrap = ctk.CTkFrame(body, fg_color="transparent")
-        grid_wrap.pack(expand=True)
+        grid_wrap.pack()
 
         bottom_row = ctk.CTkFrame(body, fg_color="transparent")
-        bottom_row.pack(pady=(18, 0))
+        bottom_row.pack(pady=(26, 0))
 
-        def make_avatar(parent, color: str, letter: str, dashed: bool = False, size: int = 84, bg: str = BG) -> tk.Canvas:
+        def make_avatar(
+            parent, color: str, letter: str, dashed: bool = False, size: int = 100, bg: str = CARD_BG,
+            hoverable: bool = False,
+        ) -> tk.Canvas:
             canvas = tk.Canvas(parent, width=size, height=size, bg=bg, highlightthickness=0)
             if dashed:
-                canvas.create_oval(2, 2, size - 2, size - 2, outline=color, width=2, dash=(4, 3))
+                oval_id = canvas.create_oval(2, 2, size - 2, size - 2, outline=color, width=2, dash=(4, 3))
             else:
-                canvas.create_oval(2, 2, size - 2, size - 2, fill=color, outline="")
+                oval_id = canvas.create_oval(2, 2, size - 2, size - 2, fill=color, outline="")
             canvas.create_text(
                 size / 2, size / 2, text=letter, fill=(color if dashed else "#0c0d11"),
                 font=(HEADING_FAMILY_SEMIBOLD, int(size * 0.38)),
             )
+            if hoverable:
+                hover_color = _lerp_color(color, "#ffffff", 0.18)
+                opt = "outline" if dashed else "fill"
+                canvas.bind("<Enter>", lambda e: canvas.itemconfig(oval_id, **{opt: hover_color}))
+                canvas.bind("<Leave>", lambda e: canvas.itemconfig(oval_id, **{opt: color}))
             return canvas
 
         def select_profile(profile_id: str) -> None:
@@ -1049,7 +1072,7 @@ class AnalyzerApp(ctk.CTk):
                 inner.pack(padx=28, pady=28)
                 avatar_color = p.color if p else ACCENT
                 avatar_letter = (p.name[:1].upper() if p and p.name else "?") if editing else "+"
-                make_avatar(inner, avatar_color, avatar_letter, bg=CARD_BG).pack(pady=(0, 14))
+                make_avatar(inner, avatar_color, avatar_letter).pack(pady=(0, 14))
                 entry = ctk.CTkEntry(
                     inner, width=220, height=34, font=self.f_body, fg_color=CARD_BG_2, border_color=BORDER,
                     text_color=TEXT, placeholder_text="" if editing else "Profile name",
@@ -1095,7 +1118,9 @@ class AnalyzerApp(ctk.CTk):
             for p in profile_list:
                 tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
                 tile.pack(side="left", padx=10, pady=6)
-                avatar = make_avatar(tile, p.color, (p.name[:1].upper() if p.name else "?"))
+                avatar = make_avatar(
+                    tile, p.color, (p.name[:1].upper() if p.name else "?"), hoverable=(state["mode"] == "select"),
+                )
                 avatar.pack()
                 name_label = ctk.CTkLabel(tile, text=p.name, text_color=TEXT_DIM, font=self.f_small, width=150)
                 name_label.pack(pady=(8, 0))
@@ -1124,7 +1149,7 @@ class AnalyzerApp(ctk.CTk):
             if state["mode"] == "select":
                 add_tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
                 add_tile.pack(side="left", padx=10, pady=6)
-                add_avatar = make_avatar(add_tile, MUTED, "+", dashed=True)
+                add_avatar = make_avatar(add_tile, MUTED, "+", dashed=True, hoverable=True)
                 add_avatar.pack()
                 add_avatar.configure(cursor="hand2")
                 add_label = ctk.CTkLabel(add_tile, text="Add Profile", text_color=MUTED, font=self.f_small)
@@ -2192,9 +2217,16 @@ class AnalyzerApp(ctk.CTk):
             else:
                 self.all_problems = list(problems)
                 self._problems_loaded = True
-                self.problem_entry.configure(
-                    state="normal", placeholder_text="Search by number or title (e.g. 1, Two Sum)..."
-                )
+                # CTkEntry.configure() applies placeholder_text before state
+                # internally, regardless of kwarg order in this call — setting
+                # both together while still "disabled" makes the placeholder
+                # update silently no-op (Tkinter Entry ignores insert/delete
+                # while disabled), leaving the stale "Loading..." text stuck
+                # on screen even though the entry is actually usable. Two
+                # calls, state first, so the placeholder update lands on an
+                # already-enabled entry.
+                self.problem_entry.configure(state="normal")
+                self.problem_entry.configure(placeholder_text="Search by number or title (e.g. 1, Two Sum)...")
                 self._set_status(f"Loaded {len(self.all_problems)} problems from {provider}.", MUTED)
                 self._update_analyze_state()
         elif kind == "problem_list_error":
