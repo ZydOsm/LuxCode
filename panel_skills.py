@@ -16,23 +16,43 @@ from theme import (
 
 
 class SkillsPanel(ctk.CTkFrame):
-    def __init__(self, parent, fonts, on_select_problem) -> None:
-        """`on_select_problem(ProblemSummary)` — jump to a problem in the Editor tab."""
+    def __init__(self, parent, fonts, on_select_problem, on_switch_profile=None, get_profile_name=None) -> None:
+        """`on_select_problem(ProblemSummary)` — jump to a problem in the Editor tab.
+        `on_switch_profile()` / `get_profile_name()` — optional, wire these up to
+        show which profile's skill history is on screen and let the user switch."""
         super().__init__(parent, fg_color=BG)
         self.fonts = fonts
         self.on_select_problem = on_select_problem
+        self.get_profile_name = get_profile_name
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        if on_switch_profile:
+            header = ctk.CTkFrame(self, fg_color="transparent")
+            header.grid(row=0, column=0, sticky="we", pady=(0, 12))
+            self.profile_label = ctk.CTkLabel(header, text="", text_color=MUTED, font=fonts.small)
+            self.profile_label.pack(side="left")
+            ctk.CTkButton(
+                header, text="Switch Profile", width=130, height=28, corner_radius=8,
+                fg_color=CARD_BG_2, hover_color=HOVER_TINT, text_color=TEXT_DIM, font=fonts.small,
+                command=on_switch_profile,
+            ).pack(side="right")
+        else:
+            self.profile_label = None
+
         self.scroll = ctk.CTkScrollableFrame(
             self, fg_color=BG, scrollbar_button_color=SCROLLBAR_THUMB, scrollbar_button_hover_color=SCROLLBAR_THUMB_HOVER,
         )
-        self.scroll.grid(row=0, column=0, sticky="nswe")
+        self.scroll.grid(row=1, column=0, sticky="nswe")
         self.scroll.grid_columnconfigure(0, weight=1)
 
         self.refresh()
 
     def refresh(self) -> None:
+        if self.profile_label is not None and self.get_profile_name:
+            self.profile_label.configure(text=f"Profile: {self.get_profile_name()}")
+
         for w in self.scroll.winfo_children():
             w.destroy()
 

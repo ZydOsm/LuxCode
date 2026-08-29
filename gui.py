@@ -21,7 +21,9 @@ from ast_lint import lint
 from code_editor import CodeEditor
 from constraints import estimate, extract_n, recommendation
 from fuzzer import can_fuzz, fuzz, generate_case
+import history
 from history import record_analysis
+import profiles
 from panel_skills import SkillsPanel
 from floating_timer import FloatingTimer
 from panel_whiteboard import WhiteboardPanel
@@ -34,7 +36,7 @@ from settings import load_settings, save_settings, update_settings
 from stencils import STENCILS
 from theme import (
     ACCENT, ACCENT_HOVER, APP_NAME, APP_TAGLINE, BG, BLUE, BODY_FAMILY, BORDER, BRAND_GOLD, CARD_BG,
-    CARD_BG_2, CODE_FAMILY, DIFFICULTY_COLOR, DIFFICULTY_SOFT, DISABLED_BG, DISABLED_ICON,
+    CARD_BG_2, CODE_FAMILY, DANGER_HOVER, DIFFICULTY_COLOR, DIFFICULTY_SOFT, DISABLED_BG, DISABLED_ICON,
     EDITOR_CHROME, FAINT, FONT_SCALE, GREEN, HEADING_FAMILY_SEMIBOLD, HOVER_TINT, LIST_BG,
     LIST_HOVER_BG, MUTED, RED, REDUCED_MOTION, SCROLLBAR_THUMB, SCROLLBAR_THUMB_HOVER, SIDEBAR_BG,
     TEXT, TEXT_DIM, THEME_MODE, YELLOW, YELLOW_SOFT, GREEN_SOFT, Fonts, Spinner,
@@ -367,6 +369,7 @@ class AnalyzerApp(ctk.CTk):
         self._build_fonts()
         self._bind_shortcuts()
 
+        self.active_profile_id = history.DEFAULT_PROFILE_ID
         self.leetcode_client = LeetCodeClient()
         self.all_problems: list[ProblemSummary] = []
         self.filtered_problems: list[ProblemSummary] = []
@@ -388,10 +391,11 @@ class AnalyzerApp(ctk.CTk):
         threading.Thread(target=self._load_problem_list, daemon=True).start()
         self.after(100, self._poll_queue)
 
-        if not self.settings.get("api_key_prompted", False) and not any_key_configured():
-            # Delayed so the main window is fully painted first — popping a
-            # modal before anything is visible reads as a crash, not a setup step.
-            self.after(400, self._show_api_key_setup_modal)
+        # Netflix-style profile picker shows every launch, not just first run
+        # — "who's coding" the same way "who's watching" gates every session
+        # there. The API-key setup modal (if still needed) follows it, once
+        # a profile is actually chosen — see _on_profile_selected().
+        self.after(50, lambda: self._show_profile_picker(allow_cancel=False))
 
     def _build_fonts(self) -> None:
         self.fonts = Fonts()  # canonical font set, shared with feature panels
@@ -850,6 +854,226 @@ class AnalyzerApp(ctk.CTk):
                 label.pack(side="left", fill="x", expand=True)
                 bind_responsive_wraplength(label, extra_padding=40)
 
+    # --------------------------------------------------------- profiles
+
+    def _current_profile_name(self) -> str:
+        if self.active_profile_id == history.GUEST_ID:
+            return "Guest"
+        match = next((p for p in profiles.load_profiles() if p.id == self.active_profile_id), None)
+        return match.name if match else "Unknown"
+
+    def _on_switch_profile_clicked(self) -> None:
+        self._show_profile_picker(allow_cancel=True)
+
+    def _on_profile_selected(self, first_launch: bool) -> None:
+        self.skills_panel.refresh()
+        if first_launch and not self.settings.get("api_key_prompted", False) and not any_key_configured():
+            # Delayed so the main window is fully painted first — popping a
+            # modal before anything is visible reads as a crash, not a setup step.
+            self.after(400, self._show_api_key_setup_modal)
+
+    def _show_profile_picker(self, allow_cancel: bool) -> None:
+        """Netflix-style "who's coding" picker. Shown on every launch (not
+        just first run — see __init__) and re-openable via the Skills tab's
+        Switch Profile button. Profiles are just named pointers to separate
+        history.json files (profiles.py); Guest runs entirely in memory, so
+        its skill history never touches disk and vanishes when you leave it."""
+        profile_list = profiles.load_profiles()
+        state = {"mode": "select", "editing_id": None}
+
+        modal = ctk.CTkToplevel(self)
+        modal.title("Who's coding?")
+        w, h = 780, 560
+        self.update_idletasks()
+        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
+        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
+        modal.geometry(f"{w}x{h}+{x}+{y}")
+        modal.configure(fg_color=BG)
+        modal.transient(self)
+        modal.resizable(False, False)
+        modal.grab_set()
+        if not allow_cancel:
+            modal.protocol("WM_DELETE_WINDOW", lambda: None)  # must pick someone to continue
+
+        body = ctk.CTkFrame(modal, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=32, pady=28)
+        ctk.CTkLabel(body, text="Who's coding?", font=self.f_title, text_color=TEXT).pack(pady=(4, 6))
+        subtitle_label = ctk.CTkLabel(body, text="", text_color=MUTED, font=self.f_small)
+        subtitle_label.pack(pady=(0, 22))
+
+        grid_wrap = ctk.CTkFrame(body, fg_color="transparent")
+        grid_wrap.pack(expand=True)
+
+        bottom_row = ctk.CTkFrame(body, fg_color="transparent")
+        bottom_row.pack(pady=(18, 0))
+
+        def make_avatar(parent, color: str, letter: str, dashed: bool = False, size: int = 84, bg: str = BG) -> tk.Canvas:
+            canvas = tk.Canvas(parent, width=size, height=size, bg=bg, highlightthickness=0)
+            if dashed:
+                canvas.create_oval(2, 2, size - 2, size - 2, outline=color, width=2, dash=(4, 3))
+            else:
+                canvas.create_oval(2, 2, size - 2, size - 2, fill=color, outline="")
+            canvas.create_text(
+                size / 2, size / 2, text=letter, fill=(color if dashed else "#0c0d11"),
+                font=(HEADING_FAMILY_SEMIBOLD, int(size * 0.38)),
+            )
+            return canvas
+
+        def select_profile(profile_id: str) -> None:
+            history.set_active_profile(profile_id)
+            was_first_launch = not getattr(self, "_profile_picked_once", False)
+            self._profile_picked_once = True
+            self.active_profile_id = profile_id
+            modal.grab_release()
+            modal.destroy()
+            self._on_profile_selected(was_first_launch)
+
+        def cancel_picker() -> None:
+            modal.grab_release()
+            modal.destroy()
+
+        def refresh_profiles() -> None:
+            profile_list[:] = profiles.load_profiles()
+
+        def render() -> None:
+            for child in grid_wrap.winfo_children():
+                child.destroy()
+            manage_btn.configure(text="Done" if state["mode"] == "manage" else "Manage Profiles")
+            subtitle_label.configure(text={
+                "select": "Click a profile to continue.",
+                "manage": "Rename or remove a profile.",
+                "add": "", "rename": "",
+            }[state["mode"]])
+
+            row = ctk.CTkFrame(grid_wrap, fg_color="transparent")
+            row.pack()
+
+            if state["mode"] in ("add", "rename"):
+                editing = state["mode"] == "rename"
+                p = next((p for p in profile_list if p.id == state["editing_id"]), None) if editing else None
+                if editing and p is None:
+                    state["mode"] = "manage"
+                    render()
+                    return
+                form = ctk.CTkFrame(row, fg_color=CARD_BG, corner_radius=12, border_width=1, border_color=BORDER)
+                form.pack(padx=10, pady=10)
+                inner = ctk.CTkFrame(form, fg_color="transparent")
+                inner.pack(padx=28, pady=28)
+                avatar_color = p.color if p else ACCENT
+                avatar_letter = (p.name[:1].upper() if p and p.name else "?") if editing else "+"
+                make_avatar(inner, avatar_color, avatar_letter, bg=CARD_BG).pack(pady=(0, 14))
+                entry = ctk.CTkEntry(
+                    inner, width=220, height=34, font=self.f_body, fg_color=CARD_BG_2, border_color=BORDER,
+                    text_color=TEXT, placeholder_text="" if editing else "Profile name",
+                )
+                if editing:
+                    entry.insert(0, p.name)
+                    entry.select_range(0, "end")
+                entry.pack(pady=(0, 12))
+                entry.focus_set()
+
+                def submit(_e=None, entry=entry, editing=editing, pid=(p.id if p else None)) -> None:
+                    name = entry.get().strip()[:24]
+                    if not name:
+                        return
+                    if editing:
+                        profiles.rename_profile(pid, name)
+                        state["mode"] = "manage"
+                        state["editing_id"] = None
+                    else:
+                        profiles.create_profile(name)
+                        state["mode"] = "select"
+                    refresh_profiles()
+                    render()
+
+                def do_cancel_form() -> None:
+                    state["mode"] = "manage" if editing else "select"
+                    state["editing_id"] = None
+                    render()
+
+                entry.bind("<Return>", submit)
+                btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+                btn_row.pack()
+                ctk.CTkButton(
+                    btn_row, text="Save" if editing else "Create", width=90, height=32, corner_radius=8,
+                    fg_color=ACCENT, hover_color=ACCENT_HOVER, font=self.f_small_bold, command=submit,
+                ).pack(side="left", padx=(0, 8))
+                ctk.CTkButton(
+                    btn_row, text="Cancel", width=90, height=32, corner_radius=8, fg_color=CARD_BG_2,
+                    hover_color=HOVER_TINT, text_color=TEXT_DIM, font=self.f_small, command=do_cancel_form,
+                ).pack(side="left")
+                return
+
+            for p in profile_list:
+                tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
+                tile.pack(side="left", padx=10, pady=6)
+                avatar = make_avatar(tile, p.color, (p.name[:1].upper() if p.name else "?"))
+                avatar.pack()
+                name_label = ctk.CTkLabel(tile, text=p.name, text_color=TEXT_DIM, font=self.f_small, width=150)
+                name_label.pack(pady=(8, 0))
+                if state["mode"] == "select":
+                    for w_ in (tile, avatar, name_label):
+                        w_.bind("<Button-1>", lambda e, pid=p.id: select_profile(pid))
+                    avatar.configure(cursor="hand2")
+                else:
+                    icon_row = ctk.CTkFrame(tile, fg_color="transparent")
+                    icon_row.pack(pady=(6, 0))
+                    ctk.CTkButton(
+                        icon_row, text="✎", width=32, height=26, corner_radius=6, fg_color=CARD_BG_2,
+                        hover_color=HOVER_TINT, text_color=TEXT_DIM, font=self.f_small,
+                        command=lambda pid=p.id: (state.update(mode="rename", editing_id=pid), render()),
+                    ).pack(side="left", padx=(0, 6))
+                    can_delete = len(profile_list) > 1
+                    ctk.CTkButton(
+                        icon_row, text="🗑", width=32, height=26, corner_radius=6, fg_color=CARD_BG_2,
+                        hover_color=DANGER_HOVER if can_delete else CARD_BG_2,
+                        text_color=TEXT_DIM if can_delete else FAINT, font=self.f_small,
+                        state="normal" if can_delete else "disabled",
+                        command=(lambda pid=p.id: (profiles.delete_profile(pid), refresh_profiles(), render()))
+                        if can_delete else None,
+                    ).pack(side="left")
+
+            if state["mode"] == "select":
+                add_tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
+                add_tile.pack(side="left", padx=10, pady=6)
+                add_avatar = make_avatar(add_tile, MUTED, "+", dashed=True)
+                add_avatar.pack()
+                add_avatar.configure(cursor="hand2")
+                add_label = ctk.CTkLabel(add_tile, text="Add Profile", text_color=MUTED, font=self.f_small)
+                add_label.pack(pady=(8, 0))
+                for w_ in (add_avatar, add_label):
+                    w_.bind("<Button-1>", lambda e: (state.update(mode="add"), render()))
+
+                guest_tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
+                guest_tile.pack(side="left", padx=10, pady=6)
+                guest_avatar = make_avatar(guest_tile, MUTED, "G", dashed=True)
+                guest_avatar.pack()
+                guest_avatar.configure(cursor="hand2")
+                guest_label = ctk.CTkLabel(guest_tile, text="Continue as Guest", text_color=MUTED, font=self.f_small)
+                guest_label.pack(pady=(8, 0))
+                ctk.CTkLabel(guest_tile, text="Skills not saved", text_color=FAINT, font=self.f_small).pack()
+                for w_ in (guest_avatar, guest_label):
+                    w_.bind("<Button-1>", lambda e: select_profile(history.GUEST_ID))
+
+        def toggle_manage() -> None:
+            state["mode"] = "select" if state["mode"] == "manage" else "manage"
+            render()
+
+        manage_btn = ctk.CTkButton(
+            bottom_row, text="Manage Profiles", width=170, height=34, corner_radius=8, fg_color="transparent",
+            border_width=1, border_color=BORDER, hover_color=CARD_BG_2, text_color=TEXT_DIM, font=self.f_small,
+            command=toggle_manage,
+        )
+        manage_btn.pack(side="left", padx=(0, 10) if allow_cancel else 0)
+        if allow_cancel:
+            ctk.CTkButton(
+                bottom_row, text="Cancel", width=100, height=34, corner_radius=8, fg_color="transparent",
+                border_width=1, border_color=BORDER, hover_color=CARD_BG_2, text_color=TEXT_DIM,
+                font=self.f_small, command=cancel_picker,
+            ).pack(side="left")
+
+        render()
+
     def _show_api_key_setup_modal(self) -> None:
         modal = ctk.CTkToplevel(self)
         modal.title("Connect an API Key")
@@ -1211,7 +1435,10 @@ class AnalyzerApp(ctk.CTk):
         self.results_scroll.grid(row=0, column=0, sticky="nswe")
         self.results_scroll.grid_columnconfigure(0, weight=1)
 
-        self.skills_panel = SkillsPanel(skills_tab, self.fonts, self._select_problem_and_go)
+        self.skills_panel = SkillsPanel(
+            skills_tab, self.fonts, self._select_problem_and_go,
+            on_switch_profile=self._on_switch_profile_clicked, get_profile_name=self._current_profile_name,
+        )
         self.skills_panel.grid(row=0, column=0, sticky="nswe")
 
         self.whiteboard_panel = WhiteboardPanel(whiteboard_tab, self.fonts)

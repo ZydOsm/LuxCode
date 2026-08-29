@@ -4,6 +4,8 @@
 # Local, per-user runtime state — not meant to be shared or templated.
 settings.json
 history.json
+history_*.json
+profiles.json
 
 # Python
 __pycache__/

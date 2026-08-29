@@ -1,7 +1,13 @@
 """Local persistent history of analyzed problems — powers the skill map and
 spaced-repetition warmup suggestions. Stored as a plain JSON file next to
 the app (or next to the .exe when packaged); no account, no server, this
-machine only."""
+machine only.
+
+Multiple people can share one install via profiles.py — each profile gets
+its own history file, picked by set_active_profile() before anything in
+this module is called. GUEST_ID is special-cased to stay in memory only
+(never written to disk), so guest sessions leave no trace after the app
+closes, per the profile picker's "skills are not saved" guest promise."""
 
 from __future__ import annotations
 
@@ -13,10 +19,28 @@ from pathlib import Path
 
 _INTERVALS_DAYS = [1, 3, 7, 14, 30, 60]
 
+GUEST_ID = "guest"
+DEFAULT_PROFILE_ID = "__default__"  # pre-existing single-user history.json, kept unsuffixed so upgrading doesn't orphan it
+
+_active_profile_id = DEFAULT_PROFILE_ID
+_guest_records: dict[str, "ProblemRecord"] = {}
+
+
+def set_active_profile(profile_id: str) -> None:
+    global _active_profile_id, _guest_records
+    _active_profile_id = profile_id
+    if profile_id == GUEST_ID:
+        _guest_records = {}  # a fresh, unsaved slate every time Guest is (re-)selected
+
+
+def path_for_profile(profile_id: str) -> Path:
+    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    suffix = "" if profile_id == DEFAULT_PROFILE_ID else f"_{profile_id}"
+    return base / f"history{suffix}.json"
+
 
 def _history_path() -> Path:
-    base = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-    return base / "history.json"
+    return path_for_profile(_active_profile_id)
 
 
 @dataclass
@@ -38,6 +62,8 @@ def _now() -> datetime:
 
 
 def load() -> dict[str, ProblemRecord]:
+    if _active_profile_id == GUEST_ID:
+        return dict(_guest_records)
     path = _history_path()
     if not path.exists():
         return {}
@@ -55,6 +81,10 @@ def load() -> dict[str, ProblemRecord]:
 
 
 def save(records: dict[str, ProblemRecord]) -> None:
+    global _guest_records
+    if _active_profile_id == GUEST_ID:
+        _guest_records = dict(records)
+        return
     path = _history_path()
     data = {slug: asdict(r) for slug, r in records.items()}
     try:
