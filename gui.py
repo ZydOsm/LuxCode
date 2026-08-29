@@ -52,8 +52,13 @@ ctk.set_default_color_theme("blue")
 # clients — not a stand-in for a literal "every judge" promise. Codeforces
 # problems are stdin/stdout, not "implement this function", so they carry no
 # function signature/example testcases; see codeforces_api.py's header for
-# what that does and doesn't disable.
+# what that does and doesn't disable. "Playground" isn't backed by a client
+# at all — it's the no-problem-attached, LLM-infers-the-purpose mode, listed
+# as a provider in its own right rather than a hidden fallback for "you
+# didn't pick a problem".
 PROVIDER_CLIENTS = {"LeetCode": LeetCodeClient, "Codeforces": CodeforcesClient}
+PLAYGROUND_PROVIDER = "Playground"
+PROVIDER_NAMES = list(PROVIDER_CLIENTS.keys()) + [PLAYGROUND_PROVIDER]
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MODEL_OPTIONS = [
@@ -213,7 +218,13 @@ class PlayButton(ctk.CTkFrame):
         animate(self, 260, on_update, on_done=on_done)
 
     def _pulse_forward(self) -> None:
-        if self.busy or not self.enabled or not self.winfo_exists():
+        # REDUCED_MOTION makes animate() call on_done() immediately/
+        # synchronously instead of deferring via .after() — since
+        # _pulse_forward/_pulse_backward call each other as on_done, that
+        # combination is unbounded recursion with no base case. An idle
+        # glow-pulse is exactly the kind of motion Reduced Motion should
+        # suppress anyway, so just skip it entirely in that mode.
+        if self.busy or not self.enabled or not self.winfo_exists() or REDUCED_MOTION:
             return
         start = self._bg_color
         animate(
@@ -222,7 +233,7 @@ class PlayButton(ctk.CTkFrame):
         )
 
     def _pulse_backward(self) -> None:
-        if self.busy or not self.enabled or not self.winfo_exists():
+        if self.busy or not self.enabled or not self.winfo_exists() or REDUCED_MOTION:
             return
         start = self._bg_color
         animate(
@@ -361,12 +372,25 @@ class AnalyzerApp(ctk.CTk):
 
         saved_window = self.settings.get("window")
         if saved_window:
-            self.geometry(f"{saved_window['w']}x{saved_window['h']}+{saved_window['x']}+{saved_window['y']}")
+            win_w, win_h, win_x, win_y = saved_window["w"], saved_window["h"], saved_window["x"], saved_window["y"]
         else:
-            self.geometry("1480x940")
+            win_w, win_h = 1480, 940
+            win_x = (self.winfo_screenwidth() - win_w) // 2
+            win_y = (self.winfo_screenheight() - win_h) // 2
+        self.geometry(f"{win_w}x{win_h}+{win_x}+{win_y}")
+        # winfo_width()/winfo_rootx() report a placeholder (~200x200) for a
+        # window that's never been mapped — which this one won't be until a
+        # profile is picked (see withdraw() below) — so the startup profile
+        # picker centers itself against these known-good numbers instead.
+        self._initial_geometry = (win_w, win_h, win_x, win_y)
         self.minsize(1140, 740)
         self.configure(fg_color=BG)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Stay hidden until a profile is actually picked — the picker modal
+        # (below) is a transient child of this window, which still displays
+        # fine on Windows while its master is withdrawn. Revealed for real
+        # in _on_profile_selected() once the choice is made.
+        self.withdraw()
 
         self._window_icon = _make_window_icon()
         try:
@@ -541,10 +565,10 @@ class AnalyzerApp(ctk.CTk):
 
         tick()
 
-    def _section_label(self, parent, text: str) -> None:
-        ctk.CTkLabel(parent, text=text.upper(), text_color=MUTED, font=self.f_section).pack(
-            anchor="w", padx=24, pady=(0, 6)
-        )
+    def _section_label(self, parent, text: str) -> ctk.CTkLabel:
+        label = ctk.CTkLabel(parent, text=text.upper(), text_color=MUTED, font=self.f_section)
+        label.pack(anchor="w", padx=24, pady=(0, 6))
+        return label
 
     def _set_status(self, text: str, color: str, busy: bool = False) -> None:
         self.status_label.configure(text=text, text_color=color)
@@ -600,7 +624,7 @@ class AnalyzerApp(ctk.CTk):
 
         self._section_label(sidebar, "Provider")
         self.provider_menu = ctk.CTkOptionMenu(
-            sidebar, values=list(PROVIDER_CLIENTS.keys()), command=self._on_provider_changed,
+            sidebar, values=PROVIDER_NAMES, command=self._on_provider_changed,
             font=self.f_body, dropdown_font=self.f_body,
             fg_color=CARD_BG, button_color=CARD_BG_2, button_hover_color=HOVER_TINT,
             dropdown_fg_color=CARD_BG_2, dropdown_hover_color=LIST_HOVER_BG,
@@ -614,8 +638,14 @@ class AnalyzerApp(ctk.CTk):
         self.provider_note.pack(anchor="w", padx=24, pady=(0, 20))
         self._update_provider_note()
 
-        self._section_label(sidebar, "Problem")
-        entry_wrap = ctk.CTkFrame(sidebar, fg_color="transparent")
+        # Everything problem-search-related lives in its own container so
+        # Playground mode (which has no problem catalog at all) can hide the
+        # whole thing in one call — see _on_provider_changed.
+        self.problem_section = ctk.CTkFrame(sidebar, fg_color="transparent")
+        self.problem_section.pack(fill="x")
+
+        self._section_label(self.problem_section, "Problem")
+        entry_wrap = ctk.CTkFrame(self.problem_section, fg_color="transparent")
         entry_wrap.pack(fill="x", padx=24)
         self.problem_entry = ctk.CTkEntry(
             entry_wrap, placeholder_text="Loading problem list...", state="disabled",
@@ -630,22 +660,35 @@ class AnalyzerApp(ctk.CTk):
         self.problem_entry.bind("<FocusOut>", self._on_search_focus_out)
 
         self.problem_listbox = ctk.CTkScrollableFrame(
-            sidebar, fg_color=LIST_BG, corner_radius=10, height=190,
+            self.problem_section, fg_color=LIST_BG, corner_radius=10, height=190,
             scrollbar_button_color=SCROLLBAR_THUMB, scrollbar_button_hover_color=SCROLLBAR_THUMB_HOVER,
         )
 
-        self.selected_badge_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
+        self.selected_badge_frame = ctk.CTkFrame(self.problem_section, fg_color="transparent")
         self.selected_badge_frame.pack(fill="x", padx=24, pady=(8, 10))
         self._render_selected_badge()
 
-        self.constraint_card = ctk.CTkFrame(sidebar, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=BORDER)
+        self.constraint_card = ctk.CTkFrame(
+            self.problem_section, fg_color=CARD_BG, corner_radius=10, border_width=1, border_color=BORDER,
+        )
         self.constraint_label = ctk.CTkLabel(
             self.constraint_card, text="", text_color=TEXT_DIM, font=self.f_small,
             wraplength=330, justify="left", anchor="w",
         )
         self.constraint_label.pack(padx=14, pady=10, anchor="w")
 
-        self._section_label(sidebar, "Language")
+        self.playground_note = ctk.CTkLabel(
+            sidebar,
+            text="Playground mode — no problem needed. Paste any code in the\n"
+                 "Editor tab and click Analyze; the LLM figures out what it does.",
+            text_color=MUTED, font=self.f_small, justify="left",
+        )
+
+        # Kept as an anchor so problem_section/playground_note can be
+        # re-inserted at the right spot after being hidden (pack() with no
+        # position args always appends at the end, which would otherwise
+        # reorder the sidebar) — see _on_provider_changed.
+        self._language_section_label = self._section_label(sidebar, "Language")
         self.language_menu = ctk.CTkOptionMenu(
             sidebar, values=LEETCODE_LANGUAGES, command=self._on_language_changed,
             font=self.f_body, dropdown_font=self.f_body,
@@ -710,7 +753,7 @@ class AnalyzerApp(ctk.CTk):
         if self.selected_problem is None:
             ctk.CTkLabel(
                 self.selected_badge_frame,
-                text="No problem selected — search above, or skip this and hit Analyze for Playground mode.",
+                text="No problem selected — search above.",
                 text_color=FAINT, font=self.f_small, wraplength=330, justify="left", anchor="w",
             ).pack(anchor="w", fill="x")
             return
@@ -898,6 +941,12 @@ class AnalyzerApp(ctk.CTk):
 
     def _on_profile_selected(self, first_launch: bool) -> None:
         self.skills_panel.refresh()
+        if first_launch:
+            # The window was withdrawn at startup specifically so it stays
+            # hidden until a profile is chosen — reveal it now that one has.
+            self.deiconify()
+            self.lift()
+            self.focus_force()
         if first_launch and not self.settings.get("api_key_prompted", False) and not any_key_configured():
             # Delayed so the main window is fully painted first — popping a
             # modal before anything is visible reads as a crash, not a setup step.
@@ -916,8 +965,16 @@ class AnalyzerApp(ctk.CTk):
         modal.title("Who's coding?")
         w, h = 780, 560
         self.update_idletasks()
-        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
-        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
+        if self.winfo_viewable():
+            origin_x, origin_y = self.winfo_rootx(), self.winfo_rooty()
+            origin_w, origin_h = self.winfo_width(), self.winfo_height()
+        else:
+            # Main window is still withdrawn (startup, before any profile has
+            # been picked) — winfo_rootx()/winfo_width() would report a
+            # meaningless placeholder size for a never-mapped window.
+            origin_w, origin_h, origin_x, origin_y = self._initial_geometry
+        x = origin_x + origin_w // 2 - w // 2
+        y = origin_y + origin_h // 2 - h // 2
         modal.geometry(f"{w}x{h}+{x}+{y}")
         modal.configure(fg_color=BG)
         modal.transient(self)
@@ -1075,15 +1132,20 @@ class AnalyzerApp(ctk.CTk):
                 for w_ in (add_avatar, add_label):
                     w_.bind("<Button-1>", lambda e: (state.update(mode="add"), render()))
 
+                # Not a tile like the others on purpose — Guest isn't a
+                # profile you create, just a plain text way past the picker.
+                # The top padding roughly lines it up with the name labels
+                # that sit below the other tiles' 84px avatars.
                 guest_tile = ctk.CTkFrame(row, fg_color="transparent", width=150)
                 guest_tile.pack(side="left", padx=10, pady=6)
-                guest_avatar = make_avatar(guest_tile, MUTED, "G", dashed=True)
-                guest_avatar.pack()
-                guest_avatar.configure(cursor="hand2")
-                guest_label = ctk.CTkLabel(guest_tile, text="Continue as Guest", text_color=MUTED, font=self.f_small)
-                guest_label.pack(pady=(8, 0))
-                ctk.CTkLabel(guest_tile, text="Skills not saved", text_color=FAINT, font=self.f_small).pack()
-                for w_ in (guest_avatar, guest_label):
+                guest_label = ctk.CTkLabel(
+                    guest_tile, text="Continue as Guest", text_color=TEXT_DIM, font=self.f_body_bold,
+                    cursor="hand2",
+                )
+                guest_label.pack(pady=(38, 4))
+                guest_sub = ctk.CTkLabel(guest_tile, text="Skills not saved", text_color=FAINT, font=self.f_small)
+                guest_sub.pack()
+                for w_ in (guest_tile, guest_label, guest_sub):
                     w_.bind("<Button-1>", lambda e: select_profile(history.GUEST_ID))
 
         def toggle_manage() -> None:
@@ -1518,22 +1580,31 @@ class AnalyzerApp(ctk.CTk):
 
         self.all_problems = []
         self.filtered_problems = []
-        self._problems_loaded = False
         self.selected_problem = None
         self.current_metadata = None
         self._hide_listbox()
-        self.problem_entry.configure(state="normal")
-        self.problem_entry.delete(0, "end")
-        self.problem_entry.configure(state="disabled", placeholder_text="Loading problem list...")
         self._render_selected_badge()
         self.constraint_card.pack_forget()
         self.hints_panel.grid_remove()
         self.fuzz_panel.grid_remove()
         self._show_report_placeholder()
-        self._update_analyze_state()
 
-        self._set_status(f"Loading problems from {provider}...", MUTED, busy=True)
-        threading.Thread(target=self._load_problem_list, args=(provider,), daemon=True).start()
+        if provider == PLAYGROUND_PROVIDER:
+            self._problems_loaded = False
+            self.problem_section.pack_forget()
+            self.playground_note.pack(anchor="w", padx=24, pady=(0, 20), before=self._language_section_label)
+            self._set_status("Playground mode — paste any code and click Analyze.", MUTED)
+        else:
+            self.playground_note.pack_forget()
+            self.problem_section.pack(fill="x", before=self._language_section_label)
+            self.problem_entry.configure(state="normal")
+            self.problem_entry.delete(0, "end")
+            self.problem_entry.configure(state="disabled", placeholder_text="Loading problem list...")
+            self._problems_loaded = False
+            self._set_status(f"Loading problems from {provider}...", MUTED, busy=True)
+            threading.Thread(target=self._load_problem_list, args=(provider,), daemon=True).start()
+
+        self._update_analyze_state()
 
     def _patch_tabview_set(self) -> None:
         original_set = self.tabview.set
@@ -1560,15 +1631,21 @@ class AnalyzerApp(ctk.CTk):
         wrap = ctk.CTkFrame(self.results_scroll, fg_color="transparent")
         wrap.grid(row=0, column=0, pady=140)
         ctk.CTkLabel(wrap, text="◇", text_color=FAINT, font=ctk.CTkFont(size=34)).pack()
-        ctk.CTkLabel(
-            wrap, text="Pick a problem, paste your solution in the Editor tab,\nand click Analyze Submission.",
-            text_color=MUTED, font=self.f_body, justify="center",
-        ).pack(pady=(10, 0))
-        ctk.CTkLabel(
-            wrap, text="Or skip picking a problem for Playground mode — paste any code\n"
-                       "and Analyze will infer what it does on its own.",
-            text_color=FAINT, font=self.f_small, justify="center",
-        ).pack(pady=(8, 0))
+        if self.active_provider == PLAYGROUND_PROVIDER:
+            ctk.CTkLabel(
+                wrap, text="Paste any code in the Editor tab and click Analyze —\n"
+                           "the LLM infers what it does on its own, no problem needed.",
+                text_color=MUTED, font=self.f_body, justify="center",
+            ).pack(pady=(10, 0))
+        else:
+            ctk.CTkLabel(
+                wrap, text="Pick a problem, paste your solution in the Editor tab,\nand click Analyze Submission.",
+                text_color=MUTED, font=self.f_body, justify="center",
+            ).pack(pady=(10, 0))
+            ctk.CTkLabel(
+                wrap, text="Or switch the Provider to Playground to analyze code\nwithout picking a problem.",
+                text_color=FAINT, font=self.f_small, justify="center",
+            ).pack(pady=(8, 0))
 
     # ------------------------------------------------------- problem list
 
@@ -1843,6 +1920,9 @@ class AnalyzerApp(ctk.CTk):
         if not code:
             self._set_status("Paste a solution first.", RED)
             return
+        if not self.selected_problem:
+            self._set_status("Select a problem first to find counter-examples.", RED)
+            return
         if self.current_metadata is None:
             self._set_status("Still loading problem details — try again in a moment.", RED)
             return
@@ -2048,9 +2128,10 @@ class AnalyzerApp(ctk.CTk):
 
     def _update_analyze_state(self) -> None:
         code = self.editor.get_text().strip()
-        # A problem doesn't have to be selected — Playground mode analyzes
-        # any code on its own, without a LeetCode problem attached.
-        ready = bool(code)
+        # Playground mode analyzes any code on its own, no problem needed —
+        # the other providers still need an actual problem picked first.
+        is_playground = self.active_provider == PLAYGROUND_PROVIDER
+        ready = bool(code) and (is_playground or self.selected_problem is not None)
         self.analyze_button.set_enabled(ready)
 
     def _on_analyze(self) -> None:
@@ -2061,7 +2142,7 @@ class AnalyzerApp(ctk.CTk):
         language = self.language_menu.get()
 
         self.analyze_button.set_busy(True)
-        if self.selected_problem:
+        if self.active_provider != PLAYGROUND_PROVIDER and self.selected_problem:
             self._set_status("Fetching problem statement...", MUTED)
             threading.Thread(
                 target=self._worker,
