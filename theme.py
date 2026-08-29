@@ -1,8 +1,5 @@
 """Shared design system: colors, fonts, animation helpers, and small reusable
-widgets used across the main app and every feature panel.
-
-Every palette below was tuned by hand, pixel by pixel — easter egg #9: yes,
-that was Zyad, at 2am, squinting at contrast ratios."""
+widgets used across the main app and every feature panel."""
 
 from __future__ import annotations
 

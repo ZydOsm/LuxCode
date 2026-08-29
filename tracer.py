@@ -5,9 +5,6 @@ auto-detected example input from the LeetCode problem statement — it is not
 a sandbox or a judge, it is exactly like running `python solution.py`
 yourself with a trace hook attached (`sys.settrace`) plus `tracemalloc` for
 real memory numbers. No new third-party dependencies.
-
-(Easter egg #10: if you're reading the tracer's own source code this
-closely, you're exactly the kind of person Zyad built this for.)
 """
 
 from __future__ import annotations

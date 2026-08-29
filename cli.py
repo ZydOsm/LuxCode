@@ -146,12 +146,6 @@ def evaluate(
     _render_report(metadata, result)
 
 
-@app.command(hidden=True)
-def zyad() -> None:
-    """Easter egg #8 — not listed in --help, just a quiet credit."""
-    console.print(Panel("This app was built by [bold]Zyad[/bold].", title="LuxCode", style="yellow"))
-
-
 def main() -> None:
     app()
 

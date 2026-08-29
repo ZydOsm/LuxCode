@@ -272,6 +272,10 @@ class TestsPanel(ctk.CTkFrame):
         ctk.CTkLabel(
             top, text=f"Example {r.case.index}: {r.case.args!r}", text_color=TEXT_DIM, font=self.fonts.code_small,
         ).pack(side="left", padx=(10, 0))
+        if r.order_independent_match:
+            ctk.CTkLabel(
+                top, text="different order, same elements", text_color=MUTED, font=self.fonts.small,
+            ).pack(side="left", padx=(10, 0))
 
         if not r.ok:
             detail_text = f"Error: {r.error}"

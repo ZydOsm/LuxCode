@@ -27,7 +27,6 @@ DEFAULTS: dict[str, Any] = {
     "window": None,  # {"x": int, "y": int, "w": int, "h": int} | None
     "onboarded": False,
     "api_key_prompted": False,  # first-run API key setup modal shown at least once
-    "_signature": "zyad",  # easter egg #11 — check your own settings.json some time
 }
 
 

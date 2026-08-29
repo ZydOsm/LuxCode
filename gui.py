@@ -32,7 +32,7 @@ from panel_trace import TracePanel
 from settings import load_settings, save_settings, update_settings
 from stencils import STENCILS
 from theme import (
-    ACCENT, ACCENT_HOVER, APP_NAME, APP_TAGLINE, BG, BODY_FAMILY, BORDER, BRAND_GOLD, CARD_BG,
+    ACCENT, ACCENT_HOVER, APP_NAME, APP_TAGLINE, BG, BLUE, BODY_FAMILY, BORDER, BRAND_GOLD, CARD_BG,
     CARD_BG_2, CODE_FAMILY, DIFFICULTY_COLOR, DIFFICULTY_SOFT, DISABLED_BG, DISABLED_ICON,
     EDITOR_CHROME, FAINT, FONT_SCALE, GREEN, HEADING_FAMILY_SEMIBOLD, HOVER_TINT, LIST_BG,
     LIST_HOVER_BG, MUTED, RED, REDUCED_MOTION, SCROLLBAR_THUMB, SCROLLBAR_THUMB_HOVER, SIDEBAR_BG,
@@ -71,10 +71,6 @@ CHANGELOG: list[tuple[str, list[str]]] = [
         "Matching-bracket highlighting and indent guides in the code editor",
         "Hover states, staggered card animations, and a memory-usage tooltip in the Trace tab",
         "Settings panel: theme (dark/light/high-contrast), reduced motion, font scale",
-    ]),
-    ("Behind the scenes", [
-        # Easter egg #5: a hint, not a map — half the fun is finding them.
-        "Zyad hid a handful of easter eggs around this app. Good luck.",
     ]),
 ]
 
@@ -379,10 +375,7 @@ class AnalyzerApp(ctk.CTk):
         self._build_main_area()
         self._show_report_placeholder()
 
-        import random
-        # Easter egg #6: a rare (1-in-20) alternate loading message.
-        loading_text = "Asking Zyad's server to hurry up..." if random.random() < 0.05 else "Loading problem list..."
-        self._set_status(loading_text, MUTED, busy=True)
+        self._set_status("Loading problem list...", MUTED, busy=True)
         threading.Thread(target=self._load_problem_list, daemon=True).start()
         self.after(100, self._poll_queue)
 
@@ -406,6 +399,10 @@ class AnalyzerApp(ctk.CTk):
         self.f_button = self.fonts.button
         self.f_code = self.fonts.code
         self.f_pill = self.fonts.pill
+        # A dedicated, larger size for icon-only buttons (settings, changelog,
+        # help) — self.f_body reads fine as text but is too small to register
+        # clearly as a clickable glyph on its own.
+        self.f_icon = ctk.CTkFont(family=BODY_FAMILY, size=int(self.fonts.card_title.cget("size") * 0.8))
 
     def _save_window_geometry(self) -> None:
         # Tk geometry strings use +/- for BOTH the delimiter and negative
@@ -460,71 +457,61 @@ class AnalyzerApp(ctk.CTk):
         self.bind("<Shift-Right>", _guarded(lambda: self.trace_panel._step_over()))
         self.bind("<Shift-Left>", _guarded(lambda: self.trace_panel._step_out()))
 
-        # Whiteboard undo/redo — Ctrl+Shift+Z is already the easter-egg
-        # chord (see below), so redo uses the other common Windows binding.
         self.bind("<Control-z>", _guarded(lambda: self.whiteboard_panel.undo(), tab="Whiteboard"))
         self.bind("<Control-y>", _guarded(lambda: self.whiteboard_panel.redo(), tab="Whiteboard"))
 
-        # Easter egg #1: a direct chord, works from anywhere, any tab.
-        self.bind_all("<Control-Shift-Z>", lambda e: self._reveal_easter_egg("shortcut"))
-        # Easter egg #2: type the word "zyad" anywhere (not while it would
-        # interfere with real typing — this only *observes* keystrokes via a
-        # non-consuming binding, it never blocks or steals them).
-        self._konami_buffer = ""
-        self.bind_all("<KeyPress>", self._track_easter_egg_typing, add="+")
-
-    def _track_easter_egg_typing(self, event) -> None:
-        char = event.char.lower() if event.char else ""
-        if not char.isalpha():
-            self._konami_buffer = ""
-            return
-        self._konami_buffer = (self._konami_buffer + char)[-4:]
-        if self._konami_buffer == "zyad":
-            self._konami_buffer = ""
-            self._reveal_easter_egg("typed")
-
-    # ---------------------------------------------------------------- easter eggs
-    #
-    # A handful of hidden "Zyad" signatures scattered through the app — a
-    # couple of these (shortcut, typed sequence, brand-mark clicks) are
-    # genuinely interactive; the rest are quieter (a rare loading message, a
-    # faint watermark, a few code/README credits). None of them affect real
-    # functionality or show up unprompted in a normal screenshot.
-
-    _EASTER_EGG_MESSAGES = [
-        "This app was built by Zyad.",
-        "You found one of Zyad's hiding spots.",
-        "Zyad was here.",
-        "Nice — that's a genuine Zyad easter egg.",
-    ]
-
-    def _on_brand_mark_click(self, event=None) -> None:
-        self._brand_click_count += 1
-        if self._brand_click_count >= 5:
-            self._brand_click_count = 0
-            self._reveal_easter_egg("brand_mark")
-
-    def _reveal_easter_egg(self, source: str) -> None:
+    def _show_confetti(self) -> None:
+        """A short celebratory burst for a genuine 10/10 — earned, not a
+        cheat code. Bounded to its own small popup rather than a real
+        full-screen overlay (no reliance on platform-specific transparent-
+        window tricks), auto-closes itself after ~2 seconds."""
         import random
-        if source == "perfect_score":
-            message = "10/10 — even Zyad would be proud."
-        else:
-            message = random.choice(self._EASTER_EGG_MESSAGES)
+
         popup = ctk.CTkToplevel(self)
-        popup.overrideredirect(True)  # no title bar — reads as a toast, not a dialog
-        popup.configure(fg_color=CARD_BG)
+        popup.overrideredirect(True)
         popup.attributes("-topmost", True)
-        frame = ctk.CTkFrame(popup, fg_color=CARD_BG, corner_radius=12, border_width=2, border_color=BRAND_GOLD)
-        frame.pack()
-        ctk.CTkLabel(
-            frame, text=f"🥚 {message}", font=self.f_body_bold, text_color=BRAND_GOLD,
-        ).pack(padx=24, pady=18)
-        # Center on the main window rather than the screen.
+        w, h = 420, 260
         self.update_idletasks()
-        x = self.winfo_rootx() + self.winfo_width() // 2 - 160
-        y = self.winfo_rooty() + self.winfo_height() // 2 - 30
-        popup.geometry(f"+{x}+{y}")
-        popup.after(2200, popup.destroy)
+        x = self.winfo_rootx() + self.winfo_width() // 2 - w // 2
+        y = self.winfo_rooty() + self.winfo_height() // 2 - h // 2
+        popup.geometry(f"{w}x{h}+{x}+{y}")
+
+        card = ctk.CTkFrame(popup, fg_color=CARD_BG, corner_radius=16, border_width=2, border_color=ACCENT)
+        card.pack(fill="both", expand=True)
+        ctk.CTkLabel(card, text="🎉 Perfect score!", font=self.f_card_title, text_color=TEXT).pack(pady=(16, 0))
+        ctk.CTkLabel(card, text="10 / 10 — structure & clarity", font=self.f_small, text_color=MUTED).pack()
+
+        canvas = tk.Canvas(card, bg=CARD_BG, highlightthickness=0)
+        canvas.pack(fill="both", expand=True, padx=4, pady=(4, 4))
+        canvas.update_idletasks()
+        cw = max(canvas.winfo_width(), w - 8)
+
+        colors = [ACCENT, GREEN, YELLOW, RED, BRAND_GOLD, BLUE]
+        particles = []  # [item_id, x, y, vx, vy]
+        for _ in range(70):
+            x0 = random.uniform(0, cw)
+            y0 = random.uniform(-h, 0)
+            size = random.uniform(4, 9)
+            item = canvas.create_rectangle(
+                x0, y0, x0 + size, y0 + size, fill=random.choice(colors), outline="",
+            )
+            particles.append([item, x0, y0, random.uniform(-1.5, 1.5), random.uniform(3, 7)])
+
+        def tick(frame: int = 0) -> None:
+            if not popup.winfo_exists():
+                return
+            if frame > 70:
+                popup.destroy()
+                return
+            for p in particles:
+                item, x0, y0, vx, vy = p
+                x0 += vx
+                y0 += vy
+                p[1], p[2] = x0, y0
+                canvas.coords(item, x0, y0, x0 + 6, y0 + 6)
+            popup.after(30, lambda: tick(frame + 1))
+
+        tick()
 
     def _section_label(self, parent, text: str) -> None:
         ctk.CTkLabel(parent, text=text.upper(), text_color=MUTED, font=self.f_section).pack(
@@ -554,20 +541,24 @@ class AnalyzerApp(ctk.CTk):
         brand.pack(anchor="w", padx=24, pady=(28, 4), fill="x")
         # A small gold/silver duotone mark nods to the LuxCode logo without
         # touching ACCENT (purple) anywhere else in the app's functional UI.
-        mark = ctk.CTkFrame(brand, width=10, height=10, fg_color=BRAND_GOLD, corner_radius=3, cursor="hand2")
+        mark = ctk.CTkFrame(brand, width=10, height=10, fg_color=BRAND_GOLD, corner_radius=3)
         mark.pack(side="left", pady=4)
-        # Easter egg #3: click the little gold mark 5 times.
-        self._brand_click_count = 0
-        mark.bind("<Button-1>", self._on_brand_mark_click)
         ctk.CTkLabel(brand, text=f"  {APP_NAME}", font=self.f_title, text_color=TEXT).pack(side="left")
         ctk.CTkButton(
-            brand, text="⚙", width=28, height=28, corner_radius=8, fg_color="transparent",
-            hover_color=CARD_BG_2, text_color=MUTED, font=self.f_body, command=self._show_settings_modal,
+            brand, text="⚙", width=36, height=36, corner_radius=9, fg_color=CARD_BG,
+            hover_color=CARD_BG_2, text_color=TEXT_DIM, font=self.f_icon, command=self._show_settings_modal,
         ).pack(side="right")
         ctk.CTkButton(
-            brand, text="✨", width=28, height=28, corner_radius=8, fg_color="transparent",
-            hover_color=CARD_BG_2, text_color=MUTED, font=self.f_body, command=self._show_changelog_modal,
-        ).pack(side="right", padx=(0, 4))
+            brand, text="✨", width=36, height=36, corner_radius=9, fg_color=CARD_BG,
+            hover_color=CARD_BG_2, text_color=TEXT_DIM, font=self.f_icon, command=self._show_changelog_modal,
+        ).pack(side="right", padx=(6, 6))
+        ctk.CTkButton(
+            brand, text="?", width=36, height=36, corner_radius=9, fg_color=CARD_BG,
+            hover_color=CARD_BG_2, text_color=TEXT_DIM, font=self.f_icon, command=self._show_help_modal,
+        ).pack(side="right")
+        ctk.CTkLabel(
+            sidebar, text="Developed by Zyad", text_color=FAINT, font=self.f_small,
+        ).pack(anchor="w", padx=24, pady=(0, 6))
         ctk.CTkLabel(
             sidebar, text=APP_TAGLINE, text_color=BRAND_GOLD, font=self.f_subtitle_bold,
         ).pack(anchor="w", padx=24, pady=(0, 2))
@@ -719,6 +710,46 @@ class AnalyzerApp(ctk.CTk):
         scroll.pack(fill="both", expand=True, padx=20, pady=20)
         for section_title, items in CHANGELOG:
             ctk.CTkLabel(scroll, text=section_title, font=self.f_card_title, text_color=TEXT).pack(
+                anchor="w", pady=(10, 6)
+            )
+            for item in items:
+                row = ctk.CTkFrame(scroll, fg_color="transparent")
+                row.pack(fill="x", pady=2)
+                ctk.CTkLabel(row, text="—", text_color=ACCENT, font=self.f_body_bold, width=16).pack(side="left")
+                label = ctk.CTkLabel(
+                    row, text=item, text_color=TEXT_DIM, font=self.f_small, justify="left", anchor="w",
+                )
+                label.pack(side="left", fill="x", expand=True)
+                bind_responsive_wraplength(label, extra_padding=40)
+
+    _HELP_SECTIONS: list[tuple[str, list[str]]] = [
+        ("Tabs", [
+            "Editor — paste a solution; live anti-pattern hints, stencils, Socratic hint slider.",
+            "Trace — steps your own code line by line: breakpoints, watches, call stack, DP grid.",
+            "Tests — reruns every official example plus curated boundary cases and a determinism check.",
+            "Report — the full LLM review: complexity, clarity score, redundancies, a refactor, a race.",
+            "Skills — a spaced-repetition warmup queue and a topic-by-topic skill map.",
+            "Whiteboard — a freehand scratchpad (shapes, text, eraser) plus the floating timer.",
+        ]),
+        ("Keyboard shortcuts", [
+            "Trace tab — Space: play/pause · ←/→: step · Shift+←/→: step out/over",
+            "Whiteboard tab — Ctrl+Z: undo · Ctrl+Y: redo",
+        ]),
+    ]
+
+    def _show_help_modal(self) -> None:
+        modal = ctk.CTkToplevel(self)
+        modal.title("Help")
+        modal.geometry("520x480")
+        modal.configure(fg_color=BG)
+        modal.transient(self)
+        scroll = ctk.CTkScrollableFrame(modal, fg_color=BG)
+        scroll.pack(fill="both", expand=True, padx=20, pady=20)
+        ctk.CTkLabel(scroll, text=f"How {APP_NAME} works", font=self.f_card_title, text_color=TEXT).pack(
+            anchor="w", pady=(0, 10)
+        )
+        for section_title, items in self._HELP_SECTIONS:
+            ctk.CTkLabel(scroll, text=section_title, font=self.f_body_bold, text_color=TEXT).pack(
                 anchor="w", pady=(10, 6)
             )
             for item in items:
@@ -925,11 +956,6 @@ class AnalyzerApp(ctk.CTk):
             body, text="Reduce motion", variable=reduced_motion_var, command=_on_toggle_reduced_motion,
             font=self.f_small, progress_color=ACCENT, button_color=CARD_BG_2,
         ).pack(anchor="w", pady=(0, 20))
-
-        # Easter egg #4: a quiet credit line, easy to miss unless you scroll.
-        ctk.CTkLabel(
-            body, text=f"{APP_NAME} — crafted by Zyad", text_color=FAINT, font=self.f_small, anchor="w",
-        ).pack(anchor="w", pady=(4, 8))
 
         footer = ctk.CTkFrame(modal, fg_color="transparent")
         footer.grid(row=1, column=0, sticky="we", padx=24, pady=16)
@@ -1685,8 +1711,7 @@ class AnalyzerApp(ctk.CTk):
             )
             self.skills_panel.refresh()
             if result.structure_and_clarity_score == 10:
-                # Easter egg #12 — earned, not hidden behind a cheat code.
-                self.after(600, lambda: self._reveal_easter_egg("perfect_score"))
+                self.after(600, self._show_confetti)
         elif kind == "hints_ready":
             slug, hints = payload
             self.hints_cache[slug] = hints

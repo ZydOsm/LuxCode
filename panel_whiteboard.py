@@ -135,19 +135,6 @@ class WhiteboardPanel(ctk.CTkFrame):
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<B1-Motion>", self._on_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
-        # Easter egg #7: a watermark in the corner, nearly the same shade as
-        # the board itself — visible only if you're looking for it.
-        self.canvas.bind("<Configure>", self._draw_watermark, add="+")
-
-    def _draw_watermark(self, event=None) -> None:
-        self.canvas.delete("watermark")
-        w = self.canvas.winfo_width()
-        h = self.canvas.winfo_height()
-        if w > 1 and h > 1:
-            self.canvas.create_text(
-                w - 10, h - 10, text="zyad", anchor="se", fill=CARD_BG_2, font=("Cascadia Code", 11), tags="watermark",
-            )
-            self.canvas.tag_lower("watermark")
 
     # -- tool state ---------------------------------------------------------
 
@@ -237,7 +224,7 @@ class WhiteboardPanel(ctk.CTkFrame):
         radius = 10
         already = {s["id"] for s in self._erased_this_drag}
         for item_id in self.canvas.find_overlapping(x - radius, y - radius, x + radius, y + radius):
-            if item_id in already or "watermark" in self.canvas.gettags(item_id):
+            if item_id in already:
                 continue
             snap = self._snapshot_item(item_id)
             snap["id"] = item_id
@@ -356,7 +343,7 @@ class WhiteboardPanel(ctk.CTkFrame):
 
     def _clear_board(self) -> None:
         self._discard_text_input()
-        real_items = [i for i in self.canvas.find_all() if "watermark" not in self.canvas.gettags(i)]
+        real_items = list(self.canvas.find_all())
         if not real_items:
             return
         snaps = [self._snapshot_item(i) for i in real_items]
