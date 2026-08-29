@@ -46,13 +46,13 @@ class AnalyzerError(RuntimeError):
     """Raised when the LLM call fails or its response cannot be validated."""
 
 
-_SYSTEM_PROMPT = """You are a senior algorithms interviewer and Python code reviewer.
-Given a LeetCode problem statement and a candidate's Python submission, evaluate:
+_SYSTEM_PROMPT = """You are a senior algorithms interviewer and {language} code reviewer.
+Given a LeetCode problem statement and a candidate's {language} submission, evaluate:
 - The actual (user) time/space complexity of the submitted code, with a short justification.
 - The optimal achievable time/space complexity for this problem given its constraints.
-- The structure, clarity, naming, PEP 8 compliance, and modularity of the code (1-10 scale).
+- The structure, clarity, naming, idiomatic style for {language}, and modularity of the code (1-10 scale).
 - Concrete redundancies: unnecessary variables, redundant logic, or suboptimal algorithmic choices.
-- A refactored, idiomatic, optimal version of the solution with inline comments on key steps.
+- A refactored, idiomatic, optimal version of the solution, in {language}, with inline comments on key steps.
 
 Respond with ONLY a single JSON object matching the required schema. Do not include markdown
 fences, headings, or any prose outside the JSON object."""
@@ -72,7 +72,7 @@ _COMPACT_FORMAT = """{
 }"""
 
 
-def _build_user_prompt(problem: ProblemMetadata, code: str) -> str:
+def _build_user_prompt(problem: ProblemMetadata, code: str, language: str) -> str:
     tags = ", ".join(problem.topic_tags) or "unknown"
     return f"""# LeetCode Problem {problem.frontend_id}: {problem.title}
 Difficulty: {problem.difficulty}
@@ -81,8 +81,8 @@ Topics: {tags}
 ## Problem statement
 {problem.content_text[:4000]}
 
-## Candidate submission (Python)
-```python
+## Candidate submission ({language})
+```
 {code}
 ```
 
@@ -91,9 +91,10 @@ Return ONLY a JSON object in exactly this shape (fill in the "..." values):
 """
 
 
-def analyze_submission(problem: ProblemMetadata, code: str, model: str) -> ReviewResult:
-    user_prompt = _build_user_prompt(problem, code)
-    raw = call_llm(model, _SYSTEM_PROMPT, user_prompt)
+def analyze_submission(problem: ProblemMetadata, code: str, model: str, language: str = "Python3") -> ReviewResult:
+    system_prompt = _SYSTEM_PROMPT.format(language=language)
+    user_prompt = _build_user_prompt(problem, code, language)
+    raw = call_llm(model, system_prompt, user_prompt)
     return _parse_response(raw)
 
 
@@ -242,7 +243,7 @@ _HINTS_SYSTEM_PROMPT = """You are a Socratic coding tutor. Given a LeetCode prob
 Respond with ONLY a JSON array of exactly 4 strings, no markdown fences, no other keys."""
 
 
-_REFACTOR_SYSTEM_PROMPT = """You are a senior Python code reviewer. Given a snippet selected from a
+_REFACTOR_SYSTEM_PROMPT = """You are a senior {language} code reviewer. Given a snippet selected from a
 larger function, propose exactly 3 alternative ways to write JUST that snippet — idiomatic,
 lower-space, or otherwise cleaner. Each alternative must be a drop-in replacement for the
 selected snippet only (same indentation level, same variables available), not a rewrite of
@@ -251,38 +252,39 @@ the whole function. Respond with ONLY a JSON array of exactly 3 objects, each wi
 markdown fences), and "why" (one short sentence). No other keys, no prose outside the JSON."""
 
 
-def suggest_alternatives(selected_code: str, full_code: str, model: str) -> list[dict]:
+def suggest_alternatives(selected_code: str, full_code: str, model: str, language: str = "Python3") -> list[dict]:
+    system_prompt = _REFACTOR_SYSTEM_PROMPT.format(language=language)
     prompt = f"""## Full function (for context only — do not rewrite this)
-```python
+```
 {full_code}
 ```
 
 ## Selected snippet to replace
-```python
+```
 {selected_code}
 ```
 
 Return a JSON array of exactly 3 alternative snippets for the SELECTED portion only."""
-    raw = call_llm(model, _REFACTOR_SYSTEM_PROMPT, prompt)
+    raw = call_llm(model, system_prompt, prompt)
     data = _extract_json(raw)
     if not isinstance(data, list) or not all(isinstance(x, dict) and "code" in x for x in data):
         raise AnalyzerError("LLM refactor response did not match the expected shape.")
     return data
 
 
-_TRANSPILE_SYSTEM_PROMPT = """You translate a Python function into idiomatic, correct {language} that
+_TRANSPILE_SYSTEM_PROMPT = """You translate a {source_language} function into idiomatic, correct {language} that
 solves the same problem the same way (same algorithm/complexity, not a different approach). After
-the code, note 2-4 concrete low-level performance trade-offs versus the Python version — memory
+the code, note 2-4 concrete low-level performance trade-offs versus the {source_language} version — memory
 layout, allocation behavior, runtime overhead, whatever is genuinely relevant for THIS language pair.
 Respond with ONLY a JSON object: {{"code": "...", "notes": "..."}}. No markdown fences, no other keys.
 This is an LLM-generated translation for educational comparison, not a verified/compiled result —
 do not claim it has been run or benchmarked."""
 
 
-def transpile(code: str, target_language: str, model: str) -> dict:
-    system_prompt = _TRANSPILE_SYSTEM_PROMPT.format(language=target_language)
-    prompt = f"""## Python source
-```python
+def transpile(code: str, target_language: str, model: str, source_language: str = "Python3") -> dict:
+    system_prompt = _TRANSPILE_SYSTEM_PROMPT.format(language=target_language, source_language=source_language)
+    prompt = f"""## {source_language} source
+```
 {code}
 ```
 

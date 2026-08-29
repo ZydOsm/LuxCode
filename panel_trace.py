@@ -110,14 +110,18 @@ def _mutation_summary(prev: object, curr: object) -> str | None:
 
 
 class TracePanel(ctk.CTkFrame):
-    def __init__(self, parent, fonts, get_context, get_model=None) -> None:
+    def __init__(self, parent, fonts, get_context, get_model=None, get_language=None) -> None:
         """`get_context()` -> (code: str, metadata: ProblemMetadata | None).
         `get_model()` -> currently selected model name (used only by "Explain
-        Exception", the one feature here that makes an LLM call)."""
+        Exception", the one feature here that makes an LLM call).
+        `get_language()` -> currently selected submission language name; real
+        execution tracing only understands Python, so a non-Python selection
+        is refused here rather than silently mis-tracing."""
         super().__init__(parent, fg_color=BG)
         self.fonts = fonts
         self.get_context = get_context
         self.get_model = get_model
+        self.get_language = get_language
         self.trace: ExecutionTrace | None = None
         self.current_step = 0
         self.playing = False
@@ -266,6 +270,13 @@ class TracePanel(ctk.CTkFrame):
         code, metadata = self.get_context()
         if not code.strip():
             self.status_label.configure(text="Paste a solution in the Editor tab first.", text_color=RED)
+            return
+        if self.get_language and self.get_language() not in ("Python3", "Python"):
+            self.status_label.configure(
+                text="Execution Trace only runs Python — switch the language selector back to "
+                     "Python3 to use this tab.",
+                text_color=RED,
+            )
             return
         expected_name = metadata.function_name if metadata else None
         func_name, class_name = find_entry_point(code, expected_name)

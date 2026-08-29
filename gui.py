@@ -609,6 +609,24 @@ class AnalyzerApp(ctk.CTk):
         )
         self.constraint_label.pack(padx=14, pady=10, anchor="w")
 
+        self._section_label(sidebar, "Language")
+        self.language_menu = ctk.CTkOptionMenu(
+            sidebar, values=LEETCODE_LANGUAGES, command=self._on_language_changed,
+            font=self.f_body, dropdown_font=self.f_body,
+            fg_color=CARD_BG, button_color=CARD_BG_2, button_hover_color=HOVER_TINT,
+            dropdown_fg_color=CARD_BG_2, dropdown_hover_color=LIST_HOVER_BG,
+            dropdown_text_color=TEXT, text_color=TEXT, corner_radius=10, height=46,
+        )
+        self.language_menu.set("Python3")
+        self.language_menu.pack(fill="x", padx=24, pady=(0, 6))
+        self.language_note = ctk.CTkLabel(
+            sidebar,
+            text="Execution Trace, Tests, Fuzz, and the Performance Race run real Python —\n"
+                 "they stay Python-only. Other languages get full LLM analysis on the Report tab.",
+            text_color=MUTED, font=self.f_small, justify="left",
+        )
+        self.language_note.pack(anchor="w", padx=24, pady=(0, 20))
+
         self._section_label(sidebar, "Model")
         self.model_menu = ctk.CTkOptionMenu(
             sidebar, values=MODEL_OPTIONS, font=self.f_body, dropdown_font=self.f_body,
@@ -1095,10 +1113,11 @@ class AnalyzerApp(ctk.CTk):
 
         toolbar = ctk.CTkFrame(editor_tab, fg_color="transparent")
         toolbar.grid(row=0, column=0, sticky="we", pady=(2, 10))
-        ctk.CTkLabel(
-            toolbar, text="Paste your Python solution.",
+        self.editor_toolbar_label = ctk.CTkLabel(
+            toolbar, text="Paste your Python3 solution.",
             text_color=MUTED, font=self.f_subtitle,
-        ).pack(side="left")
+        )
+        self.editor_toolbar_label.pack(side="left")
 
         self.blindfold_var = ctk.BooleanVar(value=False)
         blindfold_switch = ctk.CTkSwitch(
@@ -1174,10 +1193,13 @@ class AnalyzerApp(ctk.CTk):
         self.fuzz_body.pack(fill="x", padx=14, pady=10)
         self.fuzzing = False
 
-        self.trace_panel = TracePanel(trace_tab, self.fonts, self._get_trace_context, get_model=self.model_menu.get)
+        self.trace_panel = TracePanel(
+            trace_tab, self.fonts, self._get_trace_context,
+            get_model=self.model_menu.get, get_language=self.language_menu.get,
+        )
         self.trace_panel.grid(row=0, column=0, sticky="nswe")
 
-        self.tests_panel = TestsPanel(tests_tab, self.fonts, self._get_trace_context)
+        self.tests_panel = TestsPanel(tests_tab, self.fonts, self._get_trace_context, get_language=self.language_menu.get)
         self.tests_panel.grid(row=0, column=0, sticky="nswe")
 
         self.results_scroll = ctk.CTkScrollableFrame(
@@ -1202,6 +1224,20 @@ class AnalyzerApp(ctk.CTk):
 
     def _get_trace_context(self) -> tuple[str, ProblemMetadata | None]:
         return self.editor.get_text(), self.current_metadata
+
+    def _on_language_changed(self, language: str) -> None:
+        self.editor_toolbar_label.configure(text=f"Paste your {language} solution.")
+        is_python = language in ("Python3", "Python")
+        # race_button only exists once the Report tab has rendered at least
+        # one result (it lives inside the dynamically-built results cards).
+        buttons = [(self.fuzz_button, "Fuzzing...", "Find Counter-Examples")]
+        if hasattr(self, "race_button"):
+            buttons.append((self.race_button, "Racing...", "Run Race"))
+        for btn, busy_text, base_text in buttons:
+            if btn.cget("text") in (busy_text,):
+                continue  # a run is already in flight — let it finish rather than yanking the button
+            btn.configure(state="normal" if is_python else "disabled")
+            btn.configure(text=base_text if is_python else f"{base_text} (Python only)")
 
     def _patch_tabview_set(self) -> None:
         original_set = self.tabview.set
@@ -1449,12 +1485,15 @@ class AnalyzerApp(ctk.CTk):
             return
         full_code = self.editor.get_text()
         model = self.model_menu.get()
+        language = self.language_menu.get()
         self.refactor_button.configure(state="disabled", text="Thinking...")
-        threading.Thread(target=self._refactor_worker, args=(selection, full_code, model), daemon=True).start()
+        threading.Thread(
+            target=self._refactor_worker, args=(selection, full_code, model, language), daemon=True
+        ).start()
 
-    def _refactor_worker(self, selection: str, full_code: str, model: str) -> None:
+    def _refactor_worker(self, selection: str, full_code: str, model: str, language: str) -> None:
         try:
-            alternatives = suggest_alternatives(selection, full_code, model)
+            alternatives = suggest_alternatives(selection, full_code, model, language)
         except AnalyzerError as exc:
             self._result_queue.put(("refactor_error", str(exc)))
             return
@@ -1669,16 +1708,19 @@ class AnalyzerApp(ctk.CTk):
     def _on_transpile(self) -> None:
         language = self.transpile_lang_menu.get()
         code = self._refactored_code
+        source_language = self._refactored_code_language
         model = self.model_menu.get()
         self.transpile_button.configure(state="disabled", text="Translating...")
         for w in self.transpile_body.winfo_children():
             w.destroy()
         ctk.CTkLabel(self.transpile_body, text=f"Translating to {language}...", text_color=MUTED, font=self.f_small).pack(anchor="w")
-        threading.Thread(target=self._transpile_worker, args=(code, language, model), daemon=True).start()
+        threading.Thread(
+            target=self._transpile_worker, args=(code, language, model, source_language), daemon=True
+        ).start()
 
-    def _transpile_worker(self, code: str, language: str, model: str) -> None:
+    def _transpile_worker(self, code: str, language: str, model: str, source_language: str) -> None:
         try:
-            data = transpile(code, language, model)
+            data = transpile(code, language, model, source_language)
         except AnalyzerError as exc:
             self._result_queue.put(("transpile_error", str(exc)))
             return
@@ -1713,14 +1755,15 @@ class AnalyzerApp(ctk.CTk):
         if not code:
             return
         model = self.model_menu.get()
+        language = self.language_menu.get()
 
         self.analyze_button.set_busy(True)
         self._set_status("Fetching problem statement...", MUTED)
         threading.Thread(
-            target=self._worker, args=(self.selected_problem.title_slug, code, model), daemon=True
+            target=self._worker, args=(self.selected_problem.title_slug, code, model, language), daemon=True
         ).start()
 
-    def _worker(self, slug: str, code: str, model: str) -> None:
+    def _worker(self, slug: str, code: str, model: str, language: str) -> None:
         metadata = self.current_metadata if self.current_metadata and self.current_metadata.title_slug == slug else None
         if metadata is None:
             try:
@@ -1732,12 +1775,12 @@ class AnalyzerApp(ctk.CTk):
         self._result_queue.put(("status", f"Analyzing with {model}..."))
 
         try:
-            result = analyze_submission(metadata, code, model)
+            result = analyze_submission(metadata, code, model, language)
         except AnalyzerError as exc:
             self._result_queue.put(("error", str(exc)))
             return
 
-        self._result_queue.put(("done", (metadata, result)))
+        self._result_queue.put(("done", (metadata, result, language)))
 
     def _poll_queue(self) -> None:
         try:
@@ -1767,11 +1810,11 @@ class AnalyzerApp(ctk.CTk):
             self.analyze_button.set_busy(False)
             self.analyze_button.flash(False)
         elif kind == "done":
-            metadata, result = payload
+            metadata, result, language = payload
             self._set_status("Done.", GREEN)
             self.analyze_button.set_busy(False)
             self.analyze_button.flash(True)
-            self._render_report(metadata, result)
+            self._render_report(metadata, result, language)
             self.tabview.set("Report")
             record_analysis(
                 metadata.title_slug, metadata.frontend_id, metadata.title, metadata.difficulty,
@@ -1860,7 +1903,7 @@ class AnalyzerApp(ctk.CTk):
 
         self.after(delay_ms, start)
 
-    def _render_report(self, problem: ProblemMetadata, result: ReviewResult) -> None:
+    def _render_report(self, problem: ProblemMetadata, result: ReviewResult, language: str = "Python3") -> None:
         for widget in self.results_scroll.winfo_children():
             widget.destroy()
 
@@ -1960,6 +2003,7 @@ class AnalyzerApp(ctk.CTk):
         row += 1
 
         self._refactored_code = result.refactored_code
+        self._refactored_code_language = language
         self.race_card = self._card(self.results_scroll, 340)
         self.race_card.grid(row=row, column=0)
         race_header = ctk.CTkFrame(self.race_card, fg_color="transparent")
@@ -1984,13 +2028,14 @@ class AnalyzerApp(ctk.CTk):
         transpile_header = ctk.CTkFrame(self.transpile_card, fg_color="transparent")
         transpile_header.pack(fill="x", padx=20, pady=(18, 4))
         ctk.CTkLabel(transpile_header, text="Transpilation Inspector", font=self.f_card_title, text_color=TEXT).pack(side="left")
+        transpile_targets = [l for l in LEETCODE_LANGUAGES if l not in (language, "Python3", "Python")]
         self.transpile_lang_menu = ctk.CTkOptionMenu(
-            transpile_header, values=[l for l in LEETCODE_LANGUAGES if l not in ("Python3", "Python")], width=120, height=30,
+            transpile_header, values=transpile_targets, width=120, height=30,
             font=self.f_small, dropdown_font=self.f_small, fg_color=CARD_BG_2, button_color=CARD_BG_2,
             button_hover_color=HOVER_TINT, dropdown_fg_color=CARD_BG_2, dropdown_hover_color=LIST_HOVER_BG,
             dropdown_text_color=TEXT, text_color=TEXT,
         )
-        self.transpile_lang_menu.set("C++")
+        self.transpile_lang_menu.set(transpile_targets[0] if transpile_targets else "")
         self.transpile_lang_menu.pack(side="right", padx=(0, 8))
         self.transpile_button = ctk.CTkButton(
             transpile_header, text="Transpile", height=32, corner_radius=8, fg_color=ACCENT, hover_color=ACCENT_HOVER,
@@ -2004,6 +2049,11 @@ class AnalyzerApp(ctk.CTk):
         ).pack(anchor="w", padx=20, pady=(0, 10))
         self.transpile_body = ctk.CTkFrame(self.transpile_card, fg_color="transparent")
         self.transpile_body.pack(fill="both", expand=True, padx=20, pady=(0, 18))
+
+        # race_button was just (re)created above — apply the current
+        # language's Python-only gating to it immediately, rather than
+        # waiting for the next time the user touches the language menu.
+        self._on_language_changed(self.language_menu.get())
 
     def _complexity_row(self, parent: ctk.CTkFrame, grid_row: int, label: str, user, optimal) -> None:
         match = _normalize_big_o(user.big_o) == _normalize_big_o(optimal.big_o)

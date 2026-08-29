@@ -22,11 +22,15 @@ from tracer import find_entry_point, safe_call
 
 
 class TestsPanel(ctk.CTkFrame):
-    def __init__(self, parent, fonts, get_context) -> None:
-        """`get_context()` -> (code: str, metadata: ProblemMetadata | None)."""
+    def __init__(self, parent, fonts, get_context, get_language=None) -> None:
+        """`get_context()` -> (code: str, metadata: ProblemMetadata | None).
+        `get_language()` -> currently selected submission language name; real
+        execution of the test suite only understands Python, so a non-Python
+        selection is refused here rather than silently mis-running."""
         super().__init__(parent, fg_color=BG)
         self.fonts = fonts
         self.get_context = get_context
+        self.get_language = get_language
         self.running = False
         self.show_only_failures = False
         self._last_results = None
@@ -101,6 +105,13 @@ class TestsPanel(ctk.CTkFrame):
         code, metadata = self.get_context()
         if not code.strip():
             self.status_label.configure(text="Paste a solution in the Editor tab first.", text_color=RED)
+            return
+        if self.get_language and self.get_language() not in ("Python3", "Python"):
+            self.status_label.configure(
+                text="Test suite only runs Python — switch the language selector back to "
+                     "Python3 to use this tab.",
+                text_color=RED,
+            )
             return
         if metadata is None:
             self.status_label.configure(text="Still loading problem details — try again in a moment.", text_color=RED)
