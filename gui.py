@@ -22,6 +22,7 @@ from constraints import estimate, extract_n, recommendation
 from fuzzer import can_fuzz, fuzz, generate_case
 from history import record_analysis
 from panel_skills import SkillsPanel
+from floating_timer import FloatingTimer
 from panel_whiteboard import WhiteboardPanel
 from race import race
 from tracer import find_entry_point, parse_example_args
@@ -445,9 +446,9 @@ class AnalyzerApp(ctk.CTk):
                 "CTkEntry", "CTkTextbox",
             )
 
-        def _guarded(handler):
+        def _guarded(handler, tab: str = "Trace"):
             def wrapped(event=None):
-                if self.tabview.get() != "Trace" or _typing_in_entry():
+                if self.tabview.get() != tab or _typing_in_entry():
                     return
                 handler()
                 return "break"
@@ -458,6 +459,11 @@ class AnalyzerApp(ctk.CTk):
         self.bind("<Left>", _guarded(lambda: self.trace_panel._step_back()))
         self.bind("<Shift-Right>", _guarded(lambda: self.trace_panel._step_over()))
         self.bind("<Shift-Left>", _guarded(lambda: self.trace_panel._step_out()))
+
+        # Whiteboard undo/redo — Ctrl+Shift+Z is already the easter-egg
+        # chord (see below), so redo uses the other common Windows binding.
+        self.bind("<Control-z>", _guarded(lambda: self.whiteboard_panel.undo(), tab="Whiteboard"))
+        self.bind("<Control-y>", _guarded(lambda: self.whiteboard_panel.redo(), tab="Whiteboard"))
 
         # Easter egg #1: a direct chord, works from anywhere, any tab.
         self.bind_all("<Control-Shift-Z>", lambda e: self._reveal_easter_egg("shortcut"))
@@ -1092,6 +1098,13 @@ class AnalyzerApp(ctk.CTk):
 
         self.whiteboard_panel = WhiteboardPanel(whiteboard_tab, self.fonts)
         self.whiteboard_panel.grid(row=0, column=0, sticky="nswe")
+
+        # Floating, not gridded into any tab — a sibling of the tabview,
+        # placed on top of it and left there across every tab switch (see
+        # floating_timer.py's docstring for why that actually works).
+        self.floating_timer = FloatingTimer(self, self.fonts)
+        self.floating_timer.place(relx=1.0, rely=1.0, x=-32, y=-32, anchor="se")
+        self.floating_timer.lift()
 
     def _get_trace_context(self) -> tuple[str, ProblemMetadata | None]:
         return self.editor.get_text(), self.current_metadata
