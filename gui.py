@@ -13,7 +13,8 @@ import tkinter as tk
 import customtkinter as ctk
 
 from analyzer import (
-    AnalyzerError, ReviewResult, analyze_submission, generate_hints, suggest_alternatives, transpile,
+    AnalyzerError, PlaygroundResult, ReviewResult, analyze_playground, analyze_submission,
+    generate_hints, suggest_alternatives, transpile,
 )
 from api_keys import PROVIDERS, any_key_configured, get_key, has_key, write_key
 from ast_lint import lint
@@ -673,9 +674,10 @@ class AnalyzerApp(ctk.CTk):
             widget.destroy()
         if self.selected_problem is None:
             ctk.CTkLabel(
-                self.selected_badge_frame, text="No problem selected — search above.",
-                text_color=FAINT, font=self.f_small,
-            ).pack(anchor="w")
+                self.selected_badge_frame,
+                text="No problem selected — search above, or skip this and hit Analyze for Playground mode.",
+                text_color=FAINT, font=self.f_small, wraplength=330, justify="left", anchor="w",
+            ).pack(anchor="w", fill="x")
             return
         p = self.selected_problem
         row = ctk.CTkFrame(self.selected_badge_frame, fg_color="transparent")
@@ -1229,9 +1231,10 @@ class AnalyzerApp(ctk.CTk):
         self.editor_toolbar_label.configure(text=f"Paste your {language} solution.")
         is_python = language in ("Python3", "Python")
         # race_button only exists once the Report tab has rendered at least
-        # one result (it lives inside the dynamically-built results cards).
+        # one real (non-Playground) result (it lives inside the dynamically-
+        # built results cards, and Playground mode doesn't build one at all).
         buttons = [(self.fuzz_button, "Fuzzing...", "Find Counter-Examples")]
-        if hasattr(self, "race_button"):
+        if hasattr(self, "race_button") and self.race_button.winfo_exists():
             buttons.append((self.race_button, "Racing...", "Run Race"))
         for btn, busy_text, base_text in buttons:
             if btn.cget("text") in (busy_text,):
@@ -1268,6 +1271,11 @@ class AnalyzerApp(ctk.CTk):
             wrap, text="Pick a problem, paste your solution in the Editor tab,\nand click Analyze Submission.",
             text_color=MUTED, font=self.f_body, justify="center",
         ).pack(pady=(10, 0))
+        ctk.CTkLabel(
+            wrap, text="Or skip picking a problem for Playground mode — paste any code\n"
+                       "and Analyze will infer what it does on its own.",
+            text_color=FAINT, font=self.f_small, justify="center",
+        ).pack(pady=(8, 0))
 
     # ------------------------------------------------------- problem list
 
@@ -1745,12 +1753,12 @@ class AnalyzerApp(ctk.CTk):
 
     def _update_analyze_state(self) -> None:
         code = self.editor.get_text().strip()
-        ready = self._problems_loaded and self.selected_problem is not None and bool(code)
+        # A problem doesn't have to be selected — Playground mode analyzes
+        # any code on its own, without a LeetCode problem attached.
+        ready = bool(code)
         self.analyze_button.set_enabled(ready)
 
     def _on_analyze(self) -> None:
-        if not self.selected_problem:
-            return
         code = self.editor.get_text().strip()
         if not code:
             return
@@ -1758,10 +1766,22 @@ class AnalyzerApp(ctk.CTk):
         language = self.language_menu.get()
 
         self.analyze_button.set_busy(True)
-        self._set_status("Fetching problem statement...", MUTED)
-        threading.Thread(
-            target=self._worker, args=(self.selected_problem.title_slug, code, model, language), daemon=True
-        ).start()
+        if self.selected_problem:
+            self._set_status("Fetching problem statement...", MUTED)
+            threading.Thread(
+                target=self._worker, args=(self.selected_problem.title_slug, code, model, language), daemon=True
+            ).start()
+        else:
+            self._set_status(f"Analyzing with {model} (Playground mode)...", MUTED)
+            threading.Thread(target=self._playground_worker, args=(code, model, language), daemon=True).start()
+
+    def _playground_worker(self, code: str, model: str, language: str) -> None:
+        try:
+            result = analyze_playground(code, model, language)
+        except AnalyzerError as exc:
+            self._result_queue.put(("error", str(exc)))
+            return
+        self._result_queue.put(("playground_done", (result, language)))
 
     def _worker(self, slug: str, code: str, model: str, language: str) -> None:
         metadata = self.current_metadata if self.current_metadata and self.current_metadata.title_slug == slug else None
@@ -1821,6 +1841,15 @@ class AnalyzerApp(ctk.CTk):
                 metadata.topic_tags, result.structure_and_clarity_score,
             )
             self.skills_panel.refresh()
+            if result.structure_and_clarity_score == 10:
+                self.after(600, self._show_confetti)
+        elif kind == "playground_done":
+            result, language = payload
+            self._set_status("Done.", GREEN)
+            self.analyze_button.set_busy(False)
+            self.analyze_button.flash(True)
+            self._render_playground_report(result, language)
+            self.tabview.set("Report")
             if result.structure_and_clarity_score == 10:
                 self.after(600, self._show_confetti)
         elif kind == "hints_ready":
@@ -2023,6 +2052,14 @@ class AnalyzerApp(ctk.CTk):
         self.race_body.pack(fill="x", padx=20, pady=(0, 18))
         row += 1
 
+        self._build_transpile_card(row, language)
+
+        # race_button was just (re)created above — apply the current
+        # language's Python-only gating to it immediately, rather than
+        # waiting for the next time the user touches the language menu.
+        self._on_language_changed(self.language_menu.get())
+
+    def _build_transpile_card(self, row: int, language: str) -> None:
         self.transpile_card = self._card(self.results_scroll, 400)
         self.transpile_card.grid(row=row, column=0)
         transpile_header = ctk.CTkFrame(self.transpile_card, fg_color="transparent")
@@ -2050,9 +2087,132 @@ class AnalyzerApp(ctk.CTk):
         self.transpile_body = ctk.CTkFrame(self.transpile_card, fg_color="transparent")
         self.transpile_body.pack(fill="both", expand=True, padx=20, pady=(0, 18))
 
-        # race_button was just (re)created above — apply the current
-        # language's Python-only gating to it immediately, rather than
-        # waiting for the next time the user touches the language menu.
+    def _render_playground_report(self, result: PlaygroundResult, language: str = "Python3") -> None:
+        """Same report layout as _render_report, minus anything that needs a
+        known LeetCode problem: no title/difficulty/topics header, no
+        "optimal" complexity column (there's no known-optimal target without
+        a problem statement), and no Performance Race (needs a known
+        function signature and problem-scale input to generate)."""
+        for widget in self.results_scroll.winfo_children():
+            widget.destroy()
+
+        row = 0
+        header = self._card(self.results_scroll, 0)
+        header.grid(row=row, column=0)
+        ctk.CTkLabel(header, text="Playground Analysis", font=self.f_card_title, text_color=TEXT).pack(
+            anchor="w", padx=20, pady=(18, 4)
+        )
+        ctk.CTkLabel(
+            header, text=f"No LeetCode problem selected — analyzed as standalone {language} code.",
+            text_color=MUTED, font=self.f_small,
+        ).pack(anchor="w", padx=20)
+        purpose_label = ctk.CTkLabel(
+            header, text=_format_math(result.inferred_purpose), text_color=TEXT_DIM, font=self.f_body,
+            justify="left", anchor="w",
+        )
+        purpose_label.pack(anchor="w", padx=20, pady=(8, 18), fill="x")
+        bind_responsive_wraplength(purpose_label)
+        row += 1
+
+        complexity_card = self._card(self.results_scroll, 70)
+        complexity_card.grid(row=row, column=0)
+        ctk.CTkLabel(
+            complexity_card, text="Complexity Analysis", font=self.f_card_title, text_color=TEXT,
+        ).pack(anchor="w", padx=20, pady=(18, 12))
+        for label, assessment in (("Time", result.time_complexity), ("Space", result.space_complexity)):
+            row_frame = ctk.CTkFrame(complexity_card, fg_color="transparent")
+            row_frame.pack(fill="x", padx=20, pady=6)
+            ctk.CTkLabel(
+                row_frame, text=label, text_color=TEXT_DIM, font=self.f_body_bold, width=60, anchor="w",
+            ).pack(side="left")
+            col = ctk.CTkFrame(row_frame, fg_color="transparent")
+            col.pack(side="left", fill="x", expand=True)
+            _pill(col, _format_math(assessment.big_o), CARD_BG_2, TEXT, self.f_pill).pack(anchor="w")
+            just_label = ctk.CTkLabel(
+                col, text=_format_math(assessment.justification), text_color=MUTED, font=self.f_small,
+                justify="left", anchor="w",
+            )
+            just_label.pack(anchor="w", pady=(5, 0), fill="x")
+            bind_responsive_wraplength(just_label)
+        ctk.CTkLabel(complexity_card, text="", height=8).pack()
+        row += 1
+
+        score = result.structure_and_clarity_score
+        score_color = GREEN if score >= 8 else YELLOW if score >= 5 else RED
+        clarity_card = self._card(self.results_scroll, 140)
+        clarity_card.grid(row=row, column=0)
+        clarity_inner = ctk.CTkFrame(clarity_card, fg_color="transparent")
+        clarity_inner.pack(fill="x", padx=20, pady=18)
+        gauge = tk.Canvas(clarity_inner, width=92, height=92, bg=CARD_BG, highlightthickness=0)
+        gauge.pack(side="left", padx=(0, 20))
+        _draw_score_gauge(gauge, 0, score_color, self.f_score, self.f_small)
+        self.after(220, lambda: animate(
+            gauge, 700, lambda t: _draw_score_gauge(gauge, score * t, score_color, self.f_score, self.f_small)
+        ))
+        text_wrap = ctk.CTkFrame(clarity_inner, fg_color="transparent")
+        text_wrap.pack(side="left", fill="both", expand=True)
+        ctk.CTkLabel(text_wrap, text="Structure & Clarity", font=self.f_card_title, text_color=TEXT).pack(anchor="w")
+        clarity_label = ctk.CTkLabel(
+            text_wrap, text=_format_math(result.structure_and_clarity_commentary), text_color=TEXT_DIM,
+            font=self.f_body, justify="left", anchor="w",
+        )
+        clarity_label.pack(anchor="w", pady=(6, 0), fill="x")
+        bind_responsive_wraplength(clarity_label)
+        row += 1
+
+        redundancy_card = self._card(self.results_scroll, 210)
+        redundancy_card.grid(row=row, column=0)
+        ctk.CTkLabel(
+            redundancy_card, text="Redundancies & Suboptimal Choices", font=self.f_card_title, text_color=TEXT,
+        ).pack(anchor="w", padx=20, pady=(18, 10))
+        if result.redundancies:
+            for item in result.redundancies:
+                bullet = ctk.CTkFrame(redundancy_card, fg_color="transparent")
+                bullet.pack(fill="x", padx=20, pady=3)
+                ctk.CTkLabel(bullet, text="—", text_color=YELLOW, font=self.f_body_bold, width=16).pack(side="left")
+                item_label = ctk.CTkLabel(
+                    bullet, text=_format_math(item), text_color=TEXT_DIM, font=self.f_body, justify="left", anchor="w",
+                )
+                item_label.pack(side="left", fill="x", expand=True)
+                bind_responsive_wraplength(item_label, extra_padding=40)
+        else:
+            ctk.CTkLabel(redundancy_card, text="No redundancies detected.", text_color=GREEN, font=self.f_body).pack(
+                anchor="w", padx=20
+            )
+        ctk.CTkLabel(redundancy_card, text="", height=8).pack()
+        row += 1
+
+        code_card = ctk.CTkFrame(self.results_scroll, fg_color="transparent")
+        code_card.grid(row=row, column=0, sticky="we", pady=(0, 16))
+        ctk.CTkLabel(code_card, text="Refactored Solution", font=self.f_card_title, text_color=TEXT).pack(
+            anchor="w", pady=(0, 10)
+        )
+        refactored_editor = CodeEditor(
+            code_card, code_font=self.f_code, ui_font=self.f_small, read_only=True, height=320,
+        )
+        refactored_editor.pack(fill="both", expand=True)
+        refactored_editor.set_text(result.refactored_code)
+        self._reveal_frame(refactored_editor, 280, target_fg=EDITOR_CHROME, target_border=BORDER)
+        row += 1
+
+        self._refactored_code = result.refactored_code
+        self._refactored_code_language = language
+
+        race_note = self._card(self.results_scroll, 340)
+        race_note.grid(row=row, column=0)
+        ctk.CTkLabel(race_note, text="Performance Race", font=self.f_card_title, text_color=TEXT).pack(
+            anchor="w", padx=20, pady=(18, 4)
+        )
+        race_note_label = ctk.CTkLabel(
+            race_note, text="Not available in Playground mode — the Race needs a known function signature "
+                            "and problem-scale test input, which only come from a selected LeetCode problem.",
+            text_color=MUTED, font=self.f_small, justify="left", anchor="w",
+        )
+        race_note_label.pack(anchor="w", padx=20, pady=(0, 18), fill="x")
+        bind_responsive_wraplength(race_note_label)
+        row += 1
+
+        self._build_transpile_card(row, language)
         self._on_language_changed(self.language_menu.get())
 
     def _complexity_row(self, parent: ctk.CTkFrame, grid_row: int, label: str, user, optimal) -> None:

@@ -42,6 +42,30 @@ class ReviewResult(BaseModel):
     )
 
 
+class PlaygroundResult(BaseModel):
+    """Same idea as ReviewResult, but for code with no attached LeetCode
+    problem — there's no "optimal" complexity to compare against without a
+    known problem statement, so this tracks just the submission's own
+    complexity plus what the LLM inferred the code is even doing."""
+
+    inferred_purpose: str = Field(
+        ..., description="1-3 sentences on what this code appears to do, inferred from the code alone"
+    )
+    time_complexity: ComplexityAssessment
+    space_complexity: ComplexityAssessment
+    structure_and_clarity_score: int = Field(..., ge=1, le=10)
+    structure_and_clarity_commentary: str = Field(
+        ..., description="Commentary on naming, style, and modularity"
+    )
+    redundancies: list[str] = Field(
+        default_factory=list,
+        description="Unnecessary variables, redundant logic, or suboptimal choices",
+    )
+    refactored_code: str = Field(
+        ..., description="Cleaner, idiomatic version of the code with inline comments"
+    )
+
+
 class AnalyzerError(RuntimeError):
     """Raised when the LLM call fails or its response cannot be validated."""
 
@@ -96,6 +120,46 @@ def analyze_submission(problem: ProblemMetadata, code: str, model: str, language
     user_prompt = _build_user_prompt(problem, code, language)
     raw = call_llm(model, system_prompt, user_prompt)
     return _parse_response(raw)
+
+
+_PLAYGROUND_SYSTEM_PROMPT = """You are a senior {language} code reviewer analyzing a standalone snippet with
+no problem statement attached and no test cases. First, in 1-3 sentences, infer what this code actually
+does — its purpose and the kind of input/output it works with — from the code alone. Then evaluate:
+- Its actual time/space complexity, with a short justification.
+- The structure, clarity, naming, idiomatic style for {language}, and modularity of the code (1-10 scale).
+- Concrete redundancies: unnecessary variables, redundant logic, or suboptimal choices.
+- A refactored, idiomatic, cleaner version of the code, in {language}, with inline comments on key steps.
+
+Respond with ONLY a single JSON object matching the required schema. Do not include markdown
+fences, headings, or any prose outside the JSON object."""
+
+_PLAYGROUND_COMPACT_FORMAT = """{
+  "inferred_purpose": "...",
+  "time_complexity": {"big_o": "O(...)", "justification": "..."},
+  "space_complexity": {"big_o": "O(...)", "justification": "..."},
+  "structure_and_clarity_score": <int 1-10>,
+  "structure_and_clarity_commentary": "...",
+  "redundancies": ["...", "..."],
+  "refactored_code": "..."
+}"""
+
+
+def analyze_playground(code: str, model: str, language: str = "Python3") -> PlaygroundResult:
+    system_prompt = _PLAYGROUND_SYSTEM_PROMPT.format(language=language)
+    user_prompt = f"""## Submitted code ({language})
+```
+{code}
+```
+
+Return ONLY a JSON object in exactly this shape (fill in the "..." values):
+{_PLAYGROUND_COMPACT_FORMAT}
+"""
+    raw = call_llm(model, system_prompt, user_prompt)
+    data = _extract_json(raw)
+    try:
+        return PlaygroundResult.model_validate(data)
+    except ValidationError as exc:
+        raise AnalyzerError(f"LLM response did not match the expected schema:\n{exc}") from exc
 
 
 def call_llm(model: str, system_prompt: str, user_prompt: str) -> str:
