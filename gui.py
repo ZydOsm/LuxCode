@@ -660,12 +660,19 @@ class AnalyzerApp(ctk.CTk):
             row, text=f" {p.frontend_id}. {p.title}", text_color=LIST_BG, font=self.f_small,
         )
         title_label.pack(side="left")
+        badge_row2 = ctk.CTkFrame(self.selected_badge_frame, fg_color="transparent")
+        badge_row2.pack(anchor="w", fill="x", pady=(6, 0))
         pill = _pill(
-            self.selected_badge_frame, p.difficulty,
+            badge_row2, p.difficulty,
             LIST_BG, LIST_BG,
             self.f_pill,
         )
-        pill.pack(anchor="w", pady=(6, 0))
+        pill.pack(side="left")
+        view_btn = ctk.CTkButton(
+            badge_row2, text="View Problem", width=100, height=22, corner_radius=6, font=self.f_small,
+            fg_color=LIST_BG, hover_color=HOVER_TINT, text_color=LIST_BG, command=self._show_problem_modal,
+        )
+        view_btn.pack(side="left", padx=(8, 0))
 
         diff_color = DIFFICULTY_COLOR.get(p.difficulty, MUTED)
         diff_soft = DIFFICULTY_SOFT.get(p.difficulty, CARD_BG_2)
@@ -676,8 +683,61 @@ class AnalyzerApp(ctk.CTk):
             title_label.configure(text_color=_lerp_color(LIST_BG, TEXT_DIM, t))
             pill.configure(fg_color=_lerp_color(LIST_BG, diff_soft, t))
             pill_label.configure(text_color=_lerp_color(LIST_BG, diff_color, t))
+            view_btn.configure(
+                fg_color=_lerp_color(LIST_BG, CARD_BG_2, t), text_color=_lerp_color(LIST_BG, TEXT_DIM, t),
+            )
 
         animate(self.selected_badge_frame, 260, on_update)
+
+    def _show_problem_modal(self) -> None:
+        if self.selected_problem is None:
+            return
+        p = self.selected_problem
+        modal = ctk.CTkToplevel(self)
+        modal.title(f"{p.frontend_id}. {p.title}")
+        modal.geometry("640x640")
+        modal.configure(fg_color=BG)
+        modal.transient(self)
+
+        header = ctk.CTkFrame(modal, fg_color="transparent")
+        header.pack(fill="x", padx=24, pady=(20, 10))
+        ctk.CTkLabel(
+            header, text=f"{p.frontend_id}. {p.title}", font=self.f_card_title, text_color=TEXT,
+        ).pack(side="left")
+        _pill(
+            header, p.difficulty, DIFFICULTY_SOFT.get(p.difficulty, CARD_BG_2),
+            DIFFICULTY_COLOR.get(p.difficulty, MUTED), self.f_pill,
+        ).pack(side="left", padx=(10, 0))
+
+        scroll = ctk.CTkScrollableFrame(modal, fg_color=BG)
+        scroll.pack(fill="both", expand=True, padx=24, pady=(0, 20))
+
+        metadata = self.current_metadata
+        if metadata is None or metadata.title_slug != p.title_slug:
+            ctk.CTkLabel(
+                scroll, text="Still loading the full problem statement — try again in a moment.",
+                text_color=MUTED, font=self.f_body,
+            ).pack(anchor="w", pady=20)
+            return
+
+        if metadata.topic_tags:
+            ctk.CTkLabel(
+                scroll, text=f"Topics: {', '.join(metadata.topic_tags)}", text_color=MUTED, font=self.f_small,
+            ).pack(anchor="w", pady=(0, 14))
+
+        # LeetCode's prose keeps blank-line paragraph breaks even after HTML
+        # stripping — render each as its own wrapping label instead of one
+        # giant block, so long statements stay readable instead of a wall of text.
+        for paragraph in metadata.content_text.split("\n\n"):
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+            label = ctk.CTkLabel(
+                scroll, text=_format_math(paragraph), text_color=TEXT_DIM, font=self.f_body,
+                justify="left", anchor="w",
+            )
+            label.pack(anchor="w", fill="x", pady=(0, 12))
+            bind_responsive_wraplength(label, extra_padding=40)
 
     def _show_onboarding_banner(self, sidebar) -> None:
         banner = ctk.CTkFrame(sidebar, fg_color=ACCENT, corner_radius=10)
