@@ -30,6 +30,7 @@ from panel_whiteboard import WhiteboardPanel
 from race import race
 from tracer import find_entry_point, parse_example_args
 from leetcode_api import LeetCodeAPIError, LeetCodeClient, ProblemMetadata, ProblemSummary
+from codeforces_api import CodeforcesAPIError, CodeforcesClient
 from panel_tests import TestsPanel
 from panel_trace import TracePanel
 from settings import load_settings, save_settings, update_settings
@@ -46,6 +47,13 @@ from theme import (
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+# Question providers. "LeetCode" and "Codeforces" are both real, working
+# clients — not a stand-in for a literal "every judge" promise. Codeforces
+# problems are stdin/stdout, not "implement this function", so they carry no
+# function signature/example testcases; see codeforces_api.py's header for
+# what that does and doesn't disable.
+PROVIDER_CLIENTS = {"LeetCode": LeetCodeClient, "Codeforces": CodeforcesClient}
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MODEL_OPTIONS = [
@@ -370,7 +378,8 @@ class AnalyzerApp(ctk.CTk):
         self._bind_shortcuts()
 
         self.active_profile_id = history.DEFAULT_PROFILE_ID
-        self.leetcode_client = LeetCodeClient()
+        self.active_provider = "LeetCode"
+        self._provider_clients = {name: cls() for name, cls in PROVIDER_CLIENTS.items()}
         self.all_problems: list[ProblemSummary] = []
         self.filtered_problems: list[ProblemSummary] = []
         self.selected_problem: ProblemSummary | None = None
@@ -388,7 +397,7 @@ class AnalyzerApp(ctk.CTk):
         self._show_report_placeholder()
 
         self._set_status("Loading problem list...", MUTED, busy=True)
-        threading.Thread(target=self._load_problem_list, daemon=True).start()
+        threading.Thread(target=self._load_problem_list, args=(self.active_provider,), daemon=True).start()
         self.after(100, self._poll_queue)
 
         # Netflix-style profile picker shows every launch, not just first run
@@ -426,9 +435,14 @@ class AnalyzerApp(ctk.CTk):
             w, h, x, y = match.groups()
             update_settings(window={"w": int(w), "h": int(h), "x": int(x), "y": int(y)})
 
+    @property
+    def problem_client(self):
+        return self._provider_clients[self.active_provider]
+
     def _on_close(self) -> None:
         self._save_window_geometry()
-        self.leetcode_client.close()
+        for client in self._provider_clients.values():
+            client.close()
         self.destroy()
 
     def _relaunch_app(self) -> None:
@@ -438,7 +452,8 @@ class AnalyzerApp(ctk.CTk):
         the app to see a Settings change take effect, do it for them: save
         window geometry, spawn a fresh process, then exit this one."""
         self._save_window_geometry()
-        self.leetcode_client.close()
+        for client in self._provider_clients.values():
+            client.close()
         if getattr(sys, "frozen", False):
             subprocess.Popen([sys.executable])
         else:
@@ -582,6 +597,22 @@ class AnalyzerApp(ctk.CTk):
 
         if not self.settings.get("onboarded", False):
             self._show_onboarding_banner(sidebar)
+
+        self._section_label(sidebar, "Provider")
+        self.provider_menu = ctk.CTkOptionMenu(
+            sidebar, values=list(PROVIDER_CLIENTS.keys()), command=self._on_provider_changed,
+            font=self.f_body, dropdown_font=self.f_body,
+            fg_color=CARD_BG, button_color=CARD_BG_2, button_hover_color=HOVER_TINT,
+            dropdown_fg_color=CARD_BG_2, dropdown_hover_color=LIST_HOVER_BG,
+            dropdown_text_color=TEXT, text_color=TEXT, corner_radius=10, height=46,
+        )
+        self.provider_menu.set(self.active_provider)
+        self.provider_menu.pack(fill="x", padx=24, pady=(0, 6))
+        self.provider_note = ctk.CTkLabel(
+            sidebar, text="", text_color=MUTED, font=self.f_small, justify="left", anchor="w", wraplength=330,
+        )
+        self.provider_note.pack(anchor="w", padx=24, pady=(0, 20))
+        self._update_provider_note()
 
         self._section_label(sidebar, "Problem")
         entry_wrap = ctk.CTkFrame(sidebar, fg_color="transparent")
@@ -1469,6 +1500,41 @@ class AnalyzerApp(ctk.CTk):
             btn.configure(state="normal" if is_python else "disabled")
             btn.configure(text=base_text if is_python else f"{base_text} (Python only)")
 
+    def _update_provider_note(self) -> None:
+        if self.active_provider == "Codeforces":
+            self.provider_note.configure(
+                text="Codeforces problems are stdin/stdout, not a function to implement — "
+                     "Execution Trace, Tests, Fuzz, and the Performance Race won't find a "
+                     "matching signature to run. Codeforces also doesn't expose full problem "
+                     "statements through its public API, so Report analysis and the problem "
+                     "viewer only see the name, rating, and tags — not the full text."
+            )
+        else:
+            self.provider_note.configure(text="")
+
+    def _on_provider_changed(self, provider: str) -> None:
+        self.active_provider = provider
+        self._update_provider_note()
+
+        self.all_problems = []
+        self.filtered_problems = []
+        self._problems_loaded = False
+        self.selected_problem = None
+        self.current_metadata = None
+        self._hide_listbox()
+        self.problem_entry.configure(state="normal")
+        self.problem_entry.delete(0, "end")
+        self.problem_entry.configure(state="disabled", placeholder_text="Loading problem list...")
+        self._render_selected_badge()
+        self.constraint_card.pack_forget()
+        self.hints_panel.grid_remove()
+        self.fuzz_panel.grid_remove()
+        self._show_report_placeholder()
+        self._update_analyze_state()
+
+        self._set_status(f"Loading problems from {provider}...", MUTED, busy=True)
+        threading.Thread(target=self._load_problem_list, args=(provider,), daemon=True).start()
+
     def _patch_tabview_set(self) -> None:
         original_set = self.tabview.set
 
@@ -1506,13 +1572,13 @@ class AnalyzerApp(ctk.CTk):
 
     # ------------------------------------------------------- problem list
 
-    def _load_problem_list(self) -> None:
+    def _load_problem_list(self, provider: str) -> None:
         try:
-            problems = self.leetcode_client.list_problems()
-        except LeetCodeAPIError as exc:
-            self._result_queue.put(("problem_list_error", str(exc)))
+            problems = self._provider_clients[provider].list_problems()
+        except (LeetCodeAPIError, CodeforcesAPIError) as exc:
+            self._result_queue.put(("problem_list_error", (provider, str(exc))))
             return
-        self._result_queue.put(("problem_list_ready", problems))
+        self._result_queue.put(("problem_list_ready", (provider, problems)))
 
     def _on_search_keyrelease(self, event=None) -> None:
         self._update_filtered(self.problem_entry.get().strip())
@@ -1590,7 +1656,9 @@ class AnalyzerApp(ctk.CTk):
         self._update_analyze_state()
         # Fetch full metadata (incl. example inputs) up front — powers the Trace
         # tab immediately and saves a redundant fetch when Analyze is clicked.
-        threading.Thread(target=self._fetch_metadata_worker, args=(problem.title_slug,), daemon=True).start()
+        threading.Thread(
+            target=self._fetch_metadata_worker, args=(problem.title_slug, self.problem_client), daemon=True
+        ).start()
 
     def _select_problem_and_go(self, problem: ProblemSummary) -> None:
         """Used by the Skills tab's warmup queue — select a problem and jump to the Editor."""
@@ -1598,10 +1666,10 @@ class AnalyzerApp(ctk.CTk):
         self.editor.set_text("")
         self.tabview.set("Editor")
 
-    def _fetch_metadata_worker(self, slug: str) -> None:
+    def _fetch_metadata_worker(self, slug: str, client) -> None:
         try:
-            metadata = self.leetcode_client.get_problem(slug)
-        except LeetCodeAPIError:
+            metadata = client.get_problem(slug)
+        except (LeetCodeAPIError, CodeforcesAPIError):
             return
         self._result_queue.put(("metadata_ready", metadata))
 
@@ -1996,7 +2064,9 @@ class AnalyzerApp(ctk.CTk):
         if self.selected_problem:
             self._set_status("Fetching problem statement...", MUTED)
             threading.Thread(
-                target=self._worker, args=(self.selected_problem.title_slug, code, model, language), daemon=True
+                target=self._worker,
+                args=(self.selected_problem.title_slug, code, model, language, self.problem_client),
+                daemon=True,
             ).start()
         else:
             self._set_status(f"Analyzing with {model} (Playground mode)...", MUTED)
@@ -2010,12 +2080,12 @@ class AnalyzerApp(ctk.CTk):
             return
         self._result_queue.put(("playground_done", (result, language)))
 
-    def _worker(self, slug: str, code: str, model: str, language: str) -> None:
+    def _worker(self, slug: str, code: str, model: str, language: str, client) -> None:
         metadata = self.current_metadata if self.current_metadata and self.current_metadata.title_slug == slug else None
         if metadata is None:
             try:
-                metadata = self.leetcode_client.get_problem(slug)
-            except LeetCodeAPIError as exc:
+                metadata = client.get_problem(slug)
+            except (LeetCodeAPIError, CodeforcesAPIError) as exc:
                 self._result_queue.put(("error", str(exc)))
                 return
 
@@ -2037,15 +2107,21 @@ class AnalyzerApp(ctk.CTk):
             return
 
         if kind == "problem_list_ready":
-            self.all_problems = list(payload)
-            self._problems_loaded = True
-            self.problem_entry.configure(
-                state="normal", placeholder_text="Search by number or title (e.g. 1, Two Sum)..."
-            )
-            self._set_status(f"Loaded {len(self.all_problems)} problems from LeetCode.", MUTED)
-            self._update_analyze_state()
+            provider, problems = payload
+            if provider != self.active_provider:
+                pass  # a stale response from a provider the user already switched away from
+            else:
+                self.all_problems = list(problems)
+                self._problems_loaded = True
+                self.problem_entry.configure(
+                    state="normal", placeholder_text="Search by number or title (e.g. 1, Two Sum)..."
+                )
+                self._set_status(f"Loaded {len(self.all_problems)} problems from {provider}.", MUTED)
+                self._update_analyze_state()
         elif kind == "problem_list_error":
-            self._set_status(f"Could not load problem list: {payload}", RED)
+            provider, message = payload
+            if provider == self.active_provider:
+                self._set_status(f"Could not load problem list: {message}", RED)
         elif kind == "metadata_ready":
             if self.selected_problem and payload.title_slug == self.selected_problem.title_slug:
                 self.current_metadata = payload
