@@ -54,6 +54,14 @@ MODEL_OPTIONS = [
     "claude-3-5-sonnet-latest",
 ]
 
+# Every language LeetCode's own submission dropdown offers for general
+# algorithm problems (its DB-only languages — MySQL, PostgreSQL, MS SQL,
+# Oracle, Pandas — are a different problem type and out of scope here).
+LEETCODE_LANGUAGES = [
+    "Python3", "Python", "C++", "Java", "C", "C#", "JavaScript", "TypeScript",
+    "PHP", "Swift", "Kotlin", "Dart", "Go", "Ruby", "Scala", "Rust", "Racket", "Erlang", "Elixir",
+]
+
 MAX_SEARCH_RESULTS = 30
 
 CHANGELOG: list[tuple[str, list[str]]] = [
@@ -1977,7 +1985,7 @@ class AnalyzerApp(ctk.CTk):
         transpile_header.pack(fill="x", padx=20, pady=(18, 4))
         ctk.CTkLabel(transpile_header, text="Transpilation Inspector", font=self.f_card_title, text_color=TEXT).pack(side="left")
         self.transpile_lang_menu = ctk.CTkOptionMenu(
-            transpile_header, values=["C++", "Rust", "Go"], width=90, height=30,
+            transpile_header, values=[l for l in LEETCODE_LANGUAGES if l not in ("Python3", "Python")], width=120, height=30,
             font=self.f_small, dropdown_font=self.f_small, fg_color=CARD_BG_2, button_color=CARD_BG_2,
             button_hover_color=HOVER_TINT, dropdown_fg_color=CARD_BG_2, dropdown_hover_color=LIST_HOVER_BG,
             dropdown_text_color=TEXT, text_color=TEXT,
